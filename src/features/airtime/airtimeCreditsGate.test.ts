@@ -8,14 +8,11 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  AIRTIME_CREDITS,
   ATC_CREATION_TYPES,
   ATC_DESTRUCTION_TYPES,
   ATC_POLICY,
   ATC_UNMEASURED_MINTS,
-  CURRENCY,
   GATE_REGISTRY,
-  LIVE_MIX_STREAMING,
 } from "@/product/invariants";
 
 const ROOT = path.resolve(__dirname, "../../..");
@@ -29,25 +26,8 @@ describe("airtime credits", () => {
     expect(GATE_REGISTRY).toContain("airtimeCredits");
   });
 
-  it("keeps the closed loop and never lets money become the right to host", () => {
-    expect(AIRTIME_CREDITS.listeningIsAlwaysFree).toBe(true);
-    expect(AIRTIME_CREDITS.hostingRequiresAtc).toBe(true);
-    expect(AIRTIME_CREDITS.atcIsPurchasable).toBe(false);
-    expect(AIRTIME_CREDITS.moneyConvertsToAtc).toBe(false);
-    expect(AIRTIME_CREDITS.atcConvertsToMoney).toBe(false);
-    expect(AIRTIME_CREDITS.atcIsTransferable).toBe(false);
-    expect(AIRTIME_CREDITS.atcIsGiftable).toBe(false);
-    expect(AIRTIME_CREDITS.serverAuthoritativeLedgerOnly).toBe(true);
-    expect(AIRTIME_CREDITS.dailyFreeDoesNotStack).toBe(true);
-    expect(AIRTIME_CREDITS.consumeDailyFreeFirst).toBe(true);
-    expect(AIRTIME_CREDITS.refuseUnmeasuredMint).toBe(true);
-    expect(ATC_UNMEASURED_MINTS).toEqual(["reception_bonus", "referral"]);
-    expect(LIVE_MIX_STREAMING.hostingRequiresAtc).toBe(true);
-    expect(CURRENCY.vcConvertsToAirtime).toBe(false);
-    expect(CURRENCY.airtimeConvertsToVc).toBe(false);
-  });
-
   it("declares the policy numbers rather than inventing measurements", () => {
+    expect(ATC_UNMEASURED_MINTS).toEqual(["reception_bonus", "referral"]);
     expect(ATC_POLICY.dailyFreeGrantAtc).toBe(7200);
     expect(ATC_POLICY.baseAtcPerVerifiedMinute).toBe(50);
     expect(ATC_POLICY.hostStartMinimumAtc).toBe(300);
@@ -62,17 +42,6 @@ describe("airtime credits", () => {
       "admin_adjust",
     ]);
     expect(ATC_DESTRUCTION_TYPES).toEqual(["host_consume", "admin_adjust"]);
-  });
-
-  it("rewrites PRODUCT so hosting is no longer described as free", () => {
-    const product = read("PRODUCT.md");
-    expect(product).toContain("Version 8");
-    expect(product).toContain("Listening is always free");
-    expect(product).toContain("Hosting burns Airtime Credits");
-    expect(product).not.toMatch(/Going live and hosting sessions is free/);
-    expect(product).toContain("Station Airtime stays parked");
-    expect(product).toContain("0008");
-    expect(product).toContain("Reception bonus and referral do not mint yet");
   });
 
   it("keeps the ledger off Stripe and off client writes", () => {

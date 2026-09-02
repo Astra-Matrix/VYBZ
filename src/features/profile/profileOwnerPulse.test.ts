@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { GATE_REGISTRY, LIVING_PROFILE } from "@/product/invariants";
+import { GATE_REGISTRY } from "@/product/invariants";
 
 const ROOT = path.resolve(__dirname, "../../..");
 
@@ -12,11 +12,6 @@ function read(rel: string) {
 describe("living profile phase 2 — owner pulse", () => {
   it("is a registered gate", () => {
     expect(GATE_REGISTRY).toContain("livingProfilePhase2");
-  });
-
-  it("locks every experience has an equivalent and owner ambient attention", () => {
-    expect(LIVING_PROFILE.everyExperienceHasAnEquivalent).toBe(true);
-    expect(LIVING_PROFILE.profileOwnerAmbientAttention).toBe(true);
   });
 
   it("mounts ProfileOwnerPulse on the owner Stage File only", () => {

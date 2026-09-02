@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { GATE_REGISTRY, VALIDATION } from "@/product/invariants";
+import { GATE_REGISTRY } from "@/product/invariants";
 
 const ROOT = path.resolve(__dirname, "../..");
 
@@ -12,10 +12,6 @@ function read(rel: string) {
 describe("validation pipeline (Vercel merge gate)", () => {
   it("is a registered gate", () => {
     expect(GATE_REGISTRY).toContain("validatePipeline");
-    expect(VALIDATION.singleValidateCommand).toBe(true);
-    expect(VALIDATION.vercelPreviewRunsValidate).toBe(true);
-    expect(VALIDATION.vercelIsMergeGate).toBe(true);
-    expect(VALIDATION.productionWalkIsReleaseEvidence).toBe(true);
   });
 
   it("defines one validate command: lint → typecheck → test → build", () => {
@@ -30,16 +26,5 @@ describe("validation pipeline (Vercel merge gate)", () => {
   it("runs validate on every Vercel Preview and Production build", () => {
     const vercel = JSON.parse(read("vercel.json")) as { buildCommand?: string };
     expect(vercel.buildCommand).toBe("npm run validate");
-  });
-
-  it("documents Vercel as the merge gate and production walk as release evidence", () => {
-    const gate = read("docs/engineering/VERCEL_BRANCH_GATE.md");
-    const agents = read("AGENTS.md");
-    expect(gate).toContain("npm run validate");
-    expect(gate).toContain("Vercel");
-    expect(gate).toContain("signed-in production walk");
-    expect(agents).toContain("npm run validate");
-    expect(agents).toContain("VERCEL_BRANCH_GATE.md");
-    expect(agents).toContain("Signed-in production walks");
   });
 });

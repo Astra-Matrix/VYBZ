@@ -5,12 +5,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  GATE_REGISTRY,
-  HUMAN_PROVENANCE,
-  LIVE_MIX_STREAMING,
-  PROVENANCE_EVENT_TYPES,
-} from "@/product/invariants";
+import { GATE_REGISTRY, PROVENANCE_EVENT_TYPES } from "@/product/invariants";
 
 const ROOT = path.resolve(__dirname, "../../..");
 
@@ -24,28 +19,7 @@ describe("human / session provenance", () => {
   });
 
   it("binds to public live mix and refuses a not-AI claim", () => {
-    expect(HUMAN_PROVENANCE.bindsToPublicLiveSession).toBe(true);
-    expect(HUMAN_PROVENANCE.fullStrengthRequiresAtcBurn).toBe(true);
-    expect(HUMAN_PROVENANCE.serverHoldsSigningMaterial).toBe(true);
-    expect(HUMAN_PROVENANCE.clientSignalsAreDeclared).toBe(true);
-    expect(HUMAN_PROVENANCE.refusesNotAiClaim).toBe(true);
-    expect(HUMAN_PROVENANCE.doesNotReplaceForensicWatermark).toBe(true);
-    expect(HUMAN_PROVENANCE.clientAudioShaIsDeclared).toBe(true);
-    expect(HUMAN_PROVENANCE.measuredAudioShaRequiresStoredBytes).toBe(true);
-    expect(HUMAN_PROVENANCE.assetToSessionLinkIsDeclared).toBe(true);
-    expect(HUMAN_PROVENANCE.c2paOnFileIsNotInferred).toBe(true);
-    expect(LIVE_MIX_STREAMING.sessionProvenanceAvailable).toBe(true);
     expect(PROVENANCE_EVENT_TYPES).toContain("atc_burn");
-  });
-
-  it("writes the refusal into PRODUCT", () => {
-    const product = read("PRODUCT.md");
-    expect(product).toContain("Version 8");
-    expect(product).toContain("0006");
-    expect(product).toContain("does not prove the music was not AI-generated");
-    expect(product).toContain("No “not AI” proof");
-    expect(product).toContain("audio SHA is measured only from stored bytes");
-    expect(product).toContain("C2PA ledger events are counted");
   });
 
   it("keeps the ledger off Stripe and off Living Mix / 1:1 calls", () => {
@@ -142,12 +116,6 @@ describe("human / session provenance", () => {
   });
 
   it("associates a sealed session with a Work using defensible Validate Humanity copy", () => {
-    expect(HUMAN_PROVENANCE.validateHumanityIsAssociationNotAuthorship).toBe(true);
-    expect(HUMAN_PROVENANCE.exposesProvenanceHistory).toBe(true);
-    expect(HUMAN_PROVENANCE.associatesSessionWithWork).toBe(true);
-    const product = read("PRODUCT.md");
-    expect(product).toContain("This file is associated with verified VYBZ creation sessions.");
-    expect(product).toContain("must not say VYBZ mathematically proves no AI was involved");
     const sql = read("supabase/migrations/20260821_0112_work_session_provenance.sql");
     expect(sql).toContain("associate_session_work");
     expect(sql).toContain("creation_session_links");

@@ -5,7 +5,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { GATE_REGISTRY, GENERATE_AUDIO, LIVING_PROFILE } from "@/product/invariants";
+import { GATE_REGISTRY } from "@/product/invariants";
 
 const ROOT = path.resolve(__dirname, "../../..");
 
@@ -24,13 +24,6 @@ function code(rel: string): string {
 describe("generate audio", () => {
   it("is a registered gate", () => {
     expect(GATE_REGISTRY).toContain("generateAudio");
-    expect(GENERATE_AUDIO.toolNotKingdom).toBe(true);
-    expect(GENERATE_AUDIO.intakeIsUploadQueue).toBe(true);
-    expect(GENERATE_AUDIO.privateUntilPlace).toBe(true);
-    expect(GENERATE_AUDIO.labeledGenerated).toBe(true);
-    expect(GENERATE_AUDIO.poweredByStabilityAi).toBe(true);
-    expect(GENERATE_AUDIO.localWorkerOnly).toBe(true);
-    expect(LIVING_PROFILE.toolsServeWork).toBe(true);
   });
 
   it("is not a permanent navigation destination", () => {

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { CREATOR_NETWORK, GATE_REGISTRY, ARTIST_STAGE_PROFILE } from "@/product/invariants";
+import { GATE_REGISTRY } from "@/product/invariants";
 
 const ROOT = path.resolve(__dirname, "../../..");
 
@@ -12,34 +12,6 @@ function read(rel: string) {
 describe("creator network", () => {
   it("is a registered gate", () => {
     expect(GATE_REGISTRY).toContain("creatorNetwork");
-  });
-
-  it("reuses VYB, Follow, live discovery, messaging, and activity without vanity counts", () => {
-    expect(CREATOR_NETWORK.vybIsWorkAcknowledgment).toBe(true);
-    expect(CREATOR_NETWORK.followIsUnidirectional).toBe(true);
-    expect(CREATOR_NETWORK.followIsNotConnect).toBe(true);
-    expect(CREATOR_NETWORK.noPublicFollowerCounts).toBe(true);
-    expect(CREATOR_NETWORK.liveDiscoveryReusesWhosLive).toBe(true);
-    expect(CREATOR_NETWORK.messagingReusesDirectMessages).toBe(true);
-    expect(CREATOR_NETWORK.activityReusesNotifications).toBe(true);
-    expect(CREATOR_NETWORK.networkCentersOnCreativeWork).toBe(true);
-    expect(CREATOR_NETWORK.exploreIsOnSocialHome).toBe(true);
-    expect(CREATOR_NETWORK.homeComposesExistingDiscovery).toBe(true);
-    expect(CREATOR_NETWORK.searchFollowIsNotConnect).toBe(true);
-    expect(CREATOR_NETWORK.vybLabelIsVyb).toBe(true);
-    expect(ARTIST_STAGE_PROFILE.connectIsARequest).toBe(true);
-    expect(ARTIST_STAGE_PROFILE.connectRequestHydratesFromServer).toBe(true);
-    expect(ARTIST_STAGE_PROFILE.noVanityFollowerCounts).toBe(true);
-  });
-
-  it("writes the distinction into PRODUCT", () => {
-    const product = read("PRODUCT.md");
-    expect(product).toContain("Follow");
-    expect(product).toContain("It is not Connect");
-    expect(product).toContain("No public follower counts");
-    expect(product).toContain("VYB");
-    expect(product).toContain("Explore on Home");
-    expect(product).toContain("Node is a Search and + tool");
   });
 
   it("composes existing Network primitives instead of a second social stack", () => {

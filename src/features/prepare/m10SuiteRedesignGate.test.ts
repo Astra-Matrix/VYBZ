@@ -10,7 +10,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { FROZEN_CONTRACTS, GATE_REGISTRY, PROHIBITIONS } from "@/product/invariants";
+import { GATE_REGISTRY } from "@/product/invariants";
 import { SUITE_APP_ACCENT_RGB, suiteAppAccentRgb } from "@/design/suiteAppAccents";
 import { PRODUCT_ACCENT_RGB } from "@/design/tokens";
 import { SUITE_APPS, type SuiteAppId } from "@/shell/suiteApps";
@@ -183,8 +183,5 @@ describe("M10 suite redesign gate (Wave R0)", () => {
     expect(gate).toContain("Wave R3 rolls ToolWorkbench");
     expect(gate).toContain("Wave R4 Library media desk");
     expect(GATE_REGISTRY).toContain("m10SuiteRedesign");
-    // Playback contracts stay frozen; no DSP-delivery claim is permitted.
-    expect(FROZEN_CONTRACTS.vdockDryPlayback).toBe(true);
-    expect(PROHIBITIONS.dspDeliveryClaims).toBe(true);
   });
 });

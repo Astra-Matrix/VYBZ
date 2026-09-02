@@ -9,7 +9,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { GATE_REGISTRY, NOT_MEASURED, PRINCIPLES } from "@/product/invariants";
+import { GATE_REGISTRY, NOT_MEASURED } from "@/product/invariants";
 
 const ROOT = path.resolve(__dirname, "../../..");
 

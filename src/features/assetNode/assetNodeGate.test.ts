@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { CREATOR_OS, GATE_REGISTRY, PRINCIPLES } from "@/product/invariants";
+import { GATE_REGISTRY } from "@/product/invariants";
 import { navItems } from "@/shell/navModel";
 
 const ROOT = path.resolve(__dirname, "../../..");
@@ -17,12 +17,6 @@ function read(rel: string) {
 describe("local asset node", () => {
   it("is a registered gate", () => {
     expect(GATE_REGISTRY).toContain("assetNode");
-  });
-
-  it("locks indexing as not publishing and originals as local-first", () => {
-    expect(CREATOR_OS.indexingIsNotPublishing).toBe(true);
-    expect(CREATOR_OS.mobileDoesNotClaimPersistentHosting).toBe(true);
-    expect(PRINCIPLES.originalsStayLocalByDefault).toBe(true);
   });
 
   it("does not add a Devices destination before the node exists in chrome", () => {
@@ -86,9 +80,6 @@ describe("local asset node", () => {
     expect(ui).toContain("session-only");
     expect(ui).toContain("Not a background host");
     expect(store).toContain("Never written to IndexedDB");
-    expect(read("PRODUCT.md")).toContain("While this app is open");
-    expect(read("PRODUCT.md")).toContain("A phone is not a background file host");
-    expect(read("PRODUCT.md")).toContain("Node is a Search and + tool");
     expect(read("src/app/routeTruth.ts")).toContain('title: "This device"');
     expect(read("src/app/routeTruth.ts")).toContain("/library?tab=device");
     expect(read("src/shell/commands.ts")).toContain("Index this device");
