@@ -40,6 +40,10 @@ Two products answer these. They share the account, key, audit log, console, and 
 
 **Why it wins:** DAW folders are large binaries with tiny daily deltas. Organization-wide dedupe means a 300-project studio pays for unique bytes, not for 300 copies of the same drum library. The agent tools make snapshots automatic.
 
+## Webhooks
+
+Every state change an integration cares about is an event: an original registered, a copy issued, a detection completed or attributed, a commit landed. Endpoints receive signed JSON with retries, a delivery log, and a test button, from the console, the API, or an agent.
+
 ## Agents
 
 Every capability is an MCP tool. Hosted at `https://vybz.cloud/api/mcp` for zero-install use with URLs and base64, and as `@vybz/mcp-server` locally for folder workflows. `/v1/openapi.json` and `/llms.txt` serve non-MCP models.

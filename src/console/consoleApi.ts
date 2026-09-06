@@ -40,6 +40,7 @@ export const SCOPES: Array<{ id: string; label: string; hint: string }> = [
   { id: "provenance:detect", label: "Provenance detect", hint: "Attribute suspect files" },
   { id: "vault:read", label: "Vault read", hint: "Repos, history, trees, blobs" },
   { id: "vault:write", label: "Vault write", hint: "Upload blobs, commit, branch" },
+  { id: "webhooks:manage", label: "Webhooks", hint: "Create, update, delete, and test endpoints" },
 ];
 
 function client() {

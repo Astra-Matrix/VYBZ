@@ -133,6 +133,19 @@ export class VybzClient {
     return this.call<{ data: Record<string, unknown>[]; summary: Record<string, number> }>("POST", `/provenance/assets/${encodeURIComponent(id)}/detect/batch`, { json: { items } });
   }
   formats() { return this.call<Record<string, unknown>>("GET", "/provenance/formats"); }
+
+  // Webhooks
+  listWebhooks() { return this.call<{ events: string[]; data: Record<string, unknown>[] }>("GET", "/webhooks"); }
+  createWebhook(req: { url: string; events?: string[]; description?: string }) { return this.call<Record<string, unknown>>("POST", "/webhooks", { json: req }); }
+  updateWebhook(id: string, req: { url?: string; events?: string[]; description?: string; active?: boolean; rotate_secret?: boolean }) { return this.call<Record<string, unknown>>("PATCH", `/webhooks/${encodeURIComponent(id)}`, { json: req }); }
+  deleteWebhook(id: string) { return this.call<Record<string, unknown>>("DELETE", `/webhooks/${encodeURIComponent(id)}`); }
+  testWebhook(id: string) { return this.call<Record<string, unknown>>("POST", `/webhooks/${encodeURIComponent(id)}/test`); }
+  webhookDeliveries(id: string, status?: string, limit = 50) {
+    const q = new URLSearchParams({ limit: String(limit) });
+    if (status) q.set("status", status);
+    return this.call<{ data: Record<string, unknown>[] }>("GET", `/webhooks/${encodeURIComponent(id)}/deliveries?${q}`);
+  }
+  retryDelivery(id: string, delivery: string) { return this.call<Record<string, unknown>>("POST", `/webhooks/${encodeURIComponent(id)}/deliveries/${encodeURIComponent(delivery)}/retry`); }
   chain() { return this.call<Record<string, unknown>>("GET", "/provenance/chain"); }
 
   // Vault

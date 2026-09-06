@@ -45,6 +45,10 @@
 - Deleting an organization cascades to its keys, assets, issuances, chain, repositories, and blobs.
 - Backups follow the database provider's point-in-time recovery.
 
+## Webhooks
+
+Every delivery is signed with the endpoint's secret over the timestamp and the exact body. Secrets are generated server-side, shown once, and rotatable. Endpoints must be https on public hosts; private and link-local addresses are refused. Deliveries never include API keys or secrets. See the signature recipe in [API](./API.md#webhooks).
+
 ## Reporting
 
 Email security@vybz.cloud. Include a request id when relevant. We acknowledge within two business days.

@@ -14,7 +14,9 @@ import { admin } from "../_shared/edge.ts";
 import {
   API_VERSION,
   ApiError,
+  WEBHOOK_EVENTS,
   authenticate,
+  emitEvent,
   baseHeaders,
   canonical,
   errorBody,
@@ -216,6 +218,7 @@ function descriptor() {
       },
     },
     formats: `${PUBLIC_BASE}/provenance/formats`,
+    webhooks: { base: `${PUBLIC_BASE}/webhooks`, events: WEBHOOK_EVENTS },
     agents: {
       mcp_remote: "https://vybz.cloud/api/mcp",
       mcp_local: "npx @vybz/mcp-server",
@@ -288,6 +291,7 @@ async function registerAsset(ctx: Ctx) {
   const fpFrames = await storeFingerprint(ctx.principal.orgId, row.id, d);
   await chain(ctx, row.id, "register", { sha256: sha, pcm_sha256: pcm, bytes: bytes.byteLength, title, format: d.format, fingerprint_frames: fpFrames });
   ctx.headers["X-VYBZ-SHA256"] = sha;
+  emitEvent(ctx.principal.orgId, "asset.registered", assetView({ ...row, fingerprint_frames: fpFrames }));
   return json({ ...assetView({ ...row, fingerprint_frames: fpFrames }), existed: false }, 201, ctx.headers);
 }
 
@@ -425,6 +429,7 @@ async function issue(ctx: Ctx, id: string) {
   if (error || !iss) throw new ApiError(500, "db_error", "The issuance could not be recorded.");
   await chain(ctx, a.id, "issue", { issuance_id: iss.id, recipient, watermark_id: watermarkId, delivered_sha256: deliveredSha, c2pa });
   if (c2pa) await chain(ctx, a.id, "c2pa", { issuance_id: iss.id, delivered_sha256: deliveredSha });
+  emitEvent(ctx.principal.orgId, "issuance.created", { ...issuanceView(iss), asset: { id: a.id, title: a.title } });
 
   const h = {
     ...ctx.headers,
@@ -852,6 +857,9 @@ async function runDetection(ctx: Ctx, a: any, d: Decoded, suspectSha: string) {
   const attributed = exact ? matches.find((m) => m.exact) ?? null : decision.attributed;
   const confidence = exact ? ("exact" as const) : decision.confidence;
   await chain(ctx, a.id, "detect", { suspect_sha256: suspectSha, candidates: matches.length, attributed: attributed?.issuance_id ?? null, confidence });
+  const summary = { ...base, asset: { id: a.id, title: a.title }, attributed, confidence, statistics: decision.statistics, candidates: matches.length };
+  emitEvent(ctx.principal.orgId, "detection.completed", summary);
+  if (attributed) emitEvent(ctx.principal.orgId, "detection.attributed", summary);
   return { ...base, attributed, confidence, statistics: decision.statistics, matches: matches.slice(0, 25), candidates: matches.length };
 }
 
@@ -1302,6 +1310,7 @@ async function commit(ctx: Ctx, id: string) {
     await admin.from("vault_commits").delete().eq("id", c.id);
     throw new ApiError(409, "head_moved", "Another writer advanced this branch first. Retry.", { branch });
   }
+  emitEvent(ctx.principal.orgId, "commit.created", { ...commitView(c), branch, repo: { id: r.id, slug: r.slug, name: r.name } });
   return json({ ...commitView(c), branch, unchanged: false }, 201, ctx.headers);
 }
 
@@ -1389,6 +1398,164 @@ async function createBranch(ctx: Ctx, id: string) {
   return json({ object: "vault.branch", name, head_sha: src?.sha ?? null }, 201, ctx.headers);
 }
 
+// ── Webhooks ────────────────────────────────────────────────────────────────
+
+function endpointView(e: any, secret?: string) {
+  return {
+    id: e.id,
+    object: "webhook.endpoint",
+    url: e.url,
+    description: e.description ?? null,
+    events: e.events ?? [],
+    active: Boolean(e.active),
+    created_at: e.created_at,
+    updated_at: e.updated_at,
+    ...(secret ? { secret } : {}),
+    links: { self: `${PUBLIC_BASE}/webhooks/${e.id}`, deliveries: `${PUBLIC_BASE}/webhooks/${e.id}/deliveries`, test: `${PUBLIC_BASE}/webhooks/${e.id}/test` },
+  };
+}
+
+function deliveryView(d: any) {
+  return {
+    id: d.id,
+    object: "webhook.delivery",
+    endpoint_id: d.endpoint_id,
+    event: d.event,
+    status: d.status,
+    attempt: d.attempt,
+    next_attempt_at: d.status === "pending" ? d.next_attempt_at : null,
+    last_status: d.last_status,
+    last_error: d.last_error,
+    created_at: d.created_at,
+    delivered_at: d.delivered_at,
+    payload: d.payload,
+  };
+}
+
+async function getEndpoint(ctx: Ctx, id: string) {
+  if (!isUuid(id)) throw new ApiError(404, "not_found", "No such webhook endpoint.");
+  const { data } = await admin.from("webhook_endpoints").select("*").eq("id", id).eq("org_id", ctx.principal.orgId).maybeSingle();
+  if (!data) throw new ApiError(404, "not_found", "No such webhook endpoint.");
+  return data;
+}
+
+function validateEvents(input: unknown): string[] {
+  const list = Array.isArray(input) ? input.map(String) : typeof input === "string" ? [input] : [];
+  const bad = list.filter((e) => e !== "*" && !(WEBHOOK_EVENTS as readonly string[]).includes(e));
+  if (bad.length) throw new ApiError(422, "invalid_events", `Unknown events: ${bad.join(", ")}.`, { supported: [...WEBHOOK_EVENTS, "*"] });
+  return list.length ? [...new Set(list)] : ["*"];
+}
+
+function validateWebhookUrl(raw: unknown): string {
+  const s = String(raw ?? "").trim();
+  let u: URL;
+  try {
+    u = new URL(s);
+  } catch {
+    throw new ApiError(422, "invalid_url", "`url` must be an https URL.");
+  }
+  if (u.protocol !== "https:") throw new ApiError(422, "invalid_url", "Webhook endpoints must use https.");
+  if (privateHost(u.hostname)) throw new ApiError(422, "url_not_allowed", "Webhook endpoints cannot point at private or local hosts.");
+  if (s.length > 2000) throw new ApiError(422, "invalid_url", "`url` is too long.");
+  return s;
+}
+
+function newSecret(): string {
+  const b = new Uint8Array(32);
+  crypto.getRandomValues(b);
+  return `whsec_${[...b].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
+}
+
+async function createWebhook(ctx: Ctx) {
+  requireScope(ctx.principal, "webhooks:manage");
+  const body = await readJson<{ url?: string; events?: unknown; description?: string }>(ctx.req);
+  const url = validateWebhookUrl(body.url);
+  const events = validateEvents(body.events);
+  const { count } = await admin.from("webhook_endpoints").select("id", { count: "exact", head: true }).eq("org_id", ctx.principal.orgId);
+  if ((count ?? 0) >= 20) throw new ApiError(422, "too_many_endpoints", "An organization may have at most 20 webhook endpoints.");
+  const secret = newSecret();
+  const { data, error } = await admin
+    .from("webhook_endpoints")
+    .insert({ org_id: ctx.principal.orgId, url, events, description: body.description ? String(body.description).slice(0, 200) : null, secret, created_by_key: ctx.principal.keyId })
+    .select("*")
+    .single();
+  if (error || !data) throw new ApiError(500, "db_error", "The endpoint could not be created.");
+  return json({ ...endpointView(data, secret), note: "Store the secret now. It is not shown again." }, 201, ctx.headers);
+}
+
+async function listWebhooks(ctx: Ctx) {
+  requireScope(ctx.principal, "org:read");
+  const { data } = await admin.from("webhook_endpoints").select("*").eq("org_id", ctx.principal.orgId).order("created_at", { ascending: false });
+  return json({ object: "list", events: WEBHOOK_EVENTS, data: (data ?? []).map((e: any) => endpointView(e)) }, 200, ctx.headers);
+}
+
+async function showWebhook(ctx: Ctx, id: string) {
+  requireScope(ctx.principal, "org:read");
+  const e = await getEndpoint(ctx, id);
+  return json(endpointView(e), 200, ctx.headers);
+}
+
+async function updateWebhook(ctx: Ctx, id: string) {
+  requireScope(ctx.principal, "webhooks:manage");
+  const e = await getEndpoint(ctx, id);
+  const body = await readJson<{ url?: string; events?: unknown; description?: string; active?: boolean; rotate_secret?: boolean }>(ctx.req);
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (body.url !== undefined) patch.url = validateWebhookUrl(body.url);
+  if (body.events !== undefined) patch.events = validateEvents(body.events);
+  if (body.description !== undefined) patch.description = body.description ? String(body.description).slice(0, 200) : null;
+  if (body.active !== undefined) patch.active = Boolean(body.active);
+  let secret: string | undefined;
+  if (body.rotate_secret === true) {
+    secret = newSecret();
+    patch.secret = secret;
+  }
+  const { data, error } = await admin.from("webhook_endpoints").update(patch).eq("id", e.id).select("*").single();
+  if (error || !data) throw new ApiError(500, "db_error", "The endpoint could not be updated.");
+  return json(endpointView(data, secret), 200, ctx.headers);
+}
+
+async function deleteWebhook(ctx: Ctx, id: string) {
+  requireScope(ctx.principal, "webhooks:manage");
+  const e = await getEndpoint(ctx, id);
+  await admin.from("webhook_endpoints").delete().eq("id", e.id);
+  return json({ object: "webhook.endpoint", id: e.id, deleted: true }, 200, ctx.headers);
+}
+
+async function testWebhook(ctx: Ctx, id: string) {
+  requireScope(ctx.principal, "webhooks:manage");
+  const e = await getEndpoint(ctx, id);
+  const { data: n } = await admin.rpc("webhook_emit", { p_org: ctx.principal.orgId, p_event: "ping", p_data: { endpoint_id: e.id, message: "VYBZ webhook test", sent_by: ctx.principal.via } });
+  if (!Number(n)) {
+    // Endpoint may not subscribe to ping; deliver a ping regardless.
+    const body = { id: crypto.randomUUID(), object: "event", event: "ping", created_at: new Date().toISOString(), org_id: ctx.principal.orgId, data: { endpoint_id: e.id, message: "VYBZ webhook test", sent_by: ctx.principal.via } };
+    await admin.from("webhook_deliveries").insert({ id: body.id, org_id: ctx.principal.orgId, endpoint_id: e.id, event: "ping", payload: body });
+  }
+  const { data: r } = await admin.rpc("webhook_dispatch", { p_limit: 50 });
+  const row = Array.isArray(r) ? r[0] : r;
+  return json({ object: "webhook.test", endpoint_id: e.id, queued: true, dispatched: Number(row?.sent ?? 0), note: "Delivery is asynchronous. Read /webhooks/{id}/deliveries for the result." }, 202, ctx.headers);
+}
+
+async function listDeliveries(ctx: Ctx, id: string) {
+  requireScope(ctx.principal, "org:read");
+  const e = await getEndpoint(ctx, id);
+  const limit = Math.min(Math.max(Number(ctx.url.searchParams.get("limit") ?? 50), 1), 200);
+  const status = ctx.url.searchParams.get("status");
+  let q = admin.from("webhook_deliveries").select("*").eq("endpoint_id", e.id).order("created_at", { ascending: false }).limit(limit);
+  if (status && ["pending", "sending", "delivered", "failed"].includes(status)) q = q.eq("status", status);
+  const { data } = await q;
+  return json({ object: "list", endpoint_id: e.id, data: (data ?? []).map(deliveryView) }, 200, ctx.headers);
+}
+
+async function retryDelivery(ctx: Ctx, id: string, deliveryId: string) {
+  requireScope(ctx.principal, "webhooks:manage");
+  const e = await getEndpoint(ctx, id);
+  if (!isUuid(deliveryId)) throw new ApiError(404, "not_found", "No such delivery.");
+  const { data } = await admin.from("webhook_deliveries").update({ status: "pending", next_attempt_at: new Date().toISOString(), request_id: null }).eq("id", deliveryId).eq("endpoint_id", e.id).select("*").maybeSingle();
+  if (!data) throw new ApiError(404, "not_found", "No such delivery.");
+  await admin.rpc("webhook_dispatch", { p_limit: 50 });
+  return json(deliveryView(data), 202, ctx.headers);
+}
+
 // ── Router ──────────────────────────────────────────────────────────────────
 
 async function route(ctx: Ctx): Promise<Response> {
@@ -1413,6 +1580,14 @@ async function route(ctx: Ctx): Promise<Response> {
       if (p3 === "issuances" && m === "GET") return listIssuances(ctx, p2);
       if (p3 === "ledger" && m === "GET") return ledger(ctx, p2);
     }
+  }
+
+  if (p0 === "webhooks") {
+    if (!p1) return m === "POST" ? createWebhook(ctx) : m === "GET" ? listWebhooks(ctx) : methodNotAllowed();
+    if (!p2) return m === "GET" ? showWebhook(ctx, p1) : m === "PATCH" ? updateWebhook(ctx, p1) : m === "DELETE" ? deleteWebhook(ctx, p1) : methodNotAllowed();
+    if (p2 === "test" && m === "POST") return testWebhook(ctx, p1);
+    if (p2 === "deliveries" && !p3 && m === "GET") return listDeliveries(ctx, p1);
+    if (p2 === "deliveries" && p3 && p4 === "retry" && m === "POST") return retryDelivery(ctx, p1, p3);
   }
 
   if (p0 === "vault" && p1 === "repos") {

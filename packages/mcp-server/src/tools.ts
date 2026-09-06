@@ -245,6 +245,43 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
     async () => run(() => client.formats()),
   );
 
+  // ── Webhooks ──────────────────────────────────────────────────────────────
+  const EVENTS = ["asset.registered", "issuance.created", "detection.completed", "detection.attributed", "commit.created", "ping", "*"] as const;
+  server.registerTool(
+    "webhooks_list",
+    { title: "List webhooks", description: "Endpoints the organization has registered for events, and the event names available." },
+    async () => run(() => client.listWebhooks()),
+  );
+  server.registerTool(
+    "webhooks_create",
+    {
+      title: "Create a webhook",
+      description: "Register an https endpoint for events. Returns the signing secret once; the agent should hand it to whoever runs the receiver. Deliveries carry X-VYBZ-Signature: t=<unix>,v1=<hex HMAC-SHA256(secret, t + '.' + body)>.",
+      inputSchema: { url: z.string().url(), events: z.array(z.enum(EVENTS)).optional().describe("Defaults to all events"), description: z.string().max(200).optional() },
+    },
+    async (a) => run(() => client.createWebhook({ url: a.url, events: a.events, description: a.description })),
+  );
+  server.registerTool(
+    "webhooks_update",
+    { title: "Update a webhook", description: "Change url, events, description, or active; `rotate_secret` issues a new secret.", inputSchema: { id: z.string().uuid(), url: z.string().url().optional(), events: z.array(z.enum(EVENTS)).optional(), description: z.string().max(200).optional(), active: z.boolean().optional(), rotate_secret: z.boolean().optional() } },
+    async (a) => run(() => client.updateWebhook(a.id, { url: a.url, events: a.events, description: a.description, active: a.active, rotate_secret: a.rotate_secret })),
+  );
+  server.registerTool(
+    "webhooks_delete",
+    { title: "Delete a webhook", inputSchema: { id: z.string().uuid() } },
+    async (a) => run(() => client.deleteWebhook(a.id)),
+  );
+  server.registerTool(
+    "webhooks_test",
+    { title: "Send a test event", description: "Queues a `ping` delivery to the endpoint and dispatches it.", inputSchema: { id: z.string().uuid() } },
+    async (a) => run(() => client.testWebhook(a.id)),
+  );
+  server.registerTool(
+    "webhook_deliveries",
+    { title: "Webhook deliveries", description: "Recent deliveries for an endpoint with status, attempts, and the last error. Retry one with `retry_delivery_id`.", inputSchema: { id: z.string().uuid(), status: z.enum(["pending", "sending", "delivered", "failed"]).optional(), limit: z.number().int().min(1).max(200).optional(), retry_delivery_id: z.string().uuid().optional() } },
+    async (a) => run(() => (a.retry_delivery_id ? client.retryDelivery(a.id, a.retry_delivery_id) : client.webhookDeliveries(a.id, a.status, a.limit ?? 50))),
+  );
+
   server.registerTool(
     "provenance_chain_verify",
     { title: "Verify ledger chain", description: "Recompute the organization's entire hash chain and report the first broken link, if any." },

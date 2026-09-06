@@ -16,7 +16,8 @@ export type Scope =
   | "provenance:write"
   | "provenance:detect"
   | "vault:read"
-  | "vault:write";
+  | "vault:write"
+  | "webhooks:manage";
 
 export interface Principal {
   /** API key id, or null when the caller is a console session. */
@@ -28,7 +29,28 @@ export interface Principal {
   via: "key" | "session";
 }
 
-export const ALL_SCOPES: Scope[] = ["org:read", "provenance:read", "provenance:write", "provenance:detect", "vault:read", "vault:write"];
+export const ALL_SCOPES: Scope[] = ["org:read", "provenance:read", "provenance:write", "provenance:detect", "vault:read", "vault:write", "webhooks:manage"];
+
+/** Events an organization can subscribe to. */
+export const WEBHOOK_EVENTS = ["asset.registered", "issuance.created", "detection.completed", "detection.attributed", "commit.created", "ping"] as const;
+export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
+
+/**
+ * Record an event for every subscribed endpoint and kick delivery. Never
+ * throws: a webhook problem must not fail the request that caused it.
+ */
+export function emitEvent(orgId: string, event: WebhookEvent, data: Record<string, unknown>): void {
+  const p = admin
+    .rpc("webhook_emit", { p_org: orgId, p_event: event, p_data: data })
+    .then(({ data: n, error }: { data: number | null; error: { message: string } | null }) => {
+      if (error) console.error("webhook_emit", event, error.message);
+      if (Number(n) > 0) return admin.rpc("webhook_dispatch", { p_limit: 50 }).then(() => undefined);
+    })
+    .catch((e: unknown) => console.error("webhook", event, e));
+  // deno-lint-ignore no-explicit-any
+  const rt = (globalThis as any).EdgeRuntime;
+  if (rt?.waitUntil) rt.waitUntil(p);
+}
 
 export class ApiError extends Error {
   status: number;

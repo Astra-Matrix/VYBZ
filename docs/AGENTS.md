@@ -57,6 +57,7 @@ Give it `https://vybz.cloud/v1/openapi.json` and `https://vybz.cloud/llms.txt`. 
 | `provenance_detect` | `provenance:detect` | Attribute suspect files to a recipient of a known asset. Any format, resampled automatically. `files` / `urls` for batches. |
 | `provenance_formats` | any | Formats this deployment decodes, and limits. |
 | `provenance_chain_verify` | `provenance:read` | Recompute the organization chain. |
+| `webhooks_list`, `webhooks_create`, `webhooks_update`, `webhooks_delete`, `webhooks_test`, `webhook_deliveries` | `org:read` / `webhooks:manage` | Signed event delivery to https endpoints; deliveries with status and retry. |
 | `vault_create_repo`, `vault_list_repos`, `vault_get_repo` | `vault:*` | Repositories. |
 | `vault_history`, `vault_tree`, `vault_diff`, `vault_branches`, `vault_create_branch` | `vault:read` / `vault:write` | Read and shape the graph. |
 | `vault_blob_exists`, `vault_upload_blob`, `vault_blob_link` | `vault:read` / `vault:write` | Blob-level operations. |
@@ -75,6 +76,7 @@ Each tool returns compact JSON. Errors return `{ error, message, status, request
 - "Verify `https://…/delivery.flac` is one of our issued copies before I approve the invoice."
 - "Check every file in `D:/Takedowns/2026-09` and list the ones attributed to a recipient."
 - "Show what changed in `midnight-drive` between yesterday's commit and now."
+- "Register `https://ops.example.com/vybz` for `detection.attributed` and send a test."
 
 ## Safety model
 

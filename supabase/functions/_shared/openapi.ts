@@ -46,6 +46,7 @@ export function openapiDocument(base: string) {
       { name: "Platform" },
       { name: "Provenance" },
       { name: "Vault" },
+      { name: "Webhooks" },
     ],
     paths: {
       "/": { get: { tags: ["Platform"], summary: "Service descriptor", security: [], responses: { "200": { description: "Products, agent entry points, docs." } } } },
@@ -123,6 +124,24 @@ export function openapiDocument(base: string) {
       },
       "/provenance/chain": { get: { tags: ["Provenance"], summary: "Verify the organization's whole ledger chain", responses: { "200": { description: "{ ok, length, first_bad_seq }" } } } },
 
+      "/webhooks": {
+        get: { tags: ["Webhooks"], summary: "List webhook endpoints", responses: { "200": jsonOf("WebhookList") } },
+        post: {
+          tags: ["Webhooks"], summary: "Create a webhook endpoint",
+          description: "Registers an https endpoint for events. The response carries the signing `secret` once; store it. Deliveries are signed as `X-VYBZ-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256(secret, t + '.' + body)>`. Failures retry with backoff over about 15 hours. Requires `webhooks:manage`.",
+          requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/WebhookCreate" } } } },
+          responses: { "201": jsonOf("WebhookWithSecret", "Created"), "422": err("Invalid url or events") },
+        },
+      },
+      "/webhooks/{id}": {
+        get: { tags: ["Webhooks"], summary: "Get an endpoint", parameters: [idParam("id", "Endpoint id")], responses: { "200": jsonOf("Webhook"), "404": err("Not found") } },
+        patch: { tags: ["Webhooks"], summary: "Update an endpoint", description: "Any of url, events, description, active. `rotate_secret: true` issues a new secret and returns it once.", parameters: [idParam("id", "Endpoint id")], requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/WebhookUpdate" } } } }, responses: { "200": jsonOf("WebhookWithSecret") } },
+        delete: { tags: ["Webhooks"], summary: "Delete an endpoint", parameters: [idParam("id", "Endpoint id")], responses: { "200": { description: "{ id, deleted: true }" } } },
+      },
+      "/webhooks/{id}/test": { post: { tags: ["Webhooks"], summary: "Send a ping event", parameters: [idParam("id", "Endpoint id")], responses: { "202": { description: "{ endpoint_id, queued, dispatched }" } } } },
+      "/webhooks/{id}/deliveries": { get: { tags: ["Webhooks"], summary: "Recent deliveries", parameters: [idParam("id", "Endpoint id"), { name: "status", in: "query", schema: { type: "string", enum: ["pending", "sending", "delivered", "failed"] } }, { name: "limit", in: "query", schema: { type: "integer", maximum: 200 } }], responses: { "200": jsonOf("DeliveryList") } } },
+      "/webhooks/{id}/deliveries/{delivery}/retry": { post: { tags: ["Webhooks"], summary: "Retry a delivery now", parameters: [idParam("id", "Endpoint id"), idParam("delivery", "Delivery id")], responses: { "202": jsonOf("Delivery") } } },
+
       "/vault/repos": {
         post: { tags: ["Vault"], summary: "Create a repository", requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/RepoCreate" } } } }, responses: { "201": jsonOf("Repo"), "409": err("Slug taken") } },
         get: { tags: ["Vault"], summary: "List repositories", responses: { "200": jsonOf("RepoList") } },
@@ -159,7 +178,7 @@ export function openapiDocument(base: string) {
     },
     components: {
       securitySchemes: {
-        apiKey: { type: "http", scheme: "bearer", bearerFormat: "vybz_live_<48 hex>", description: "Organization API key from the VYBZ Console. Scopes: org:read, provenance:read, provenance:write, provenance:detect, vault:read, vault:write. The console itself calls the API with a user session and `X-VYBZ-Org`; integrations use keys." },
+        apiKey: { type: "http", scheme: "bearer", bearerFormat: "vybz_live_<48 hex>", description: "Organization API key from the VYBZ Console. Scopes: org:read, provenance:read, provenance:write, provenance:detect, vault:read, vault:write, webhooks:manage. The console itself calls the API with a user session and `X-VYBZ-Org`; integrations use keys." },
       },
       schemas: {
         Error: { type: "object", properties: { error: { type: "object", properties: { code: { type: "string" }, message: { type: "string" }, request_id: { type: "string" }, docs: { type: "string" } }, required: ["code", "message", "request_id"] } } },
@@ -198,6 +217,13 @@ export function openapiDocument(base: string) {
         },
         VerificationBatch: { type: "object", properties: { object: { const: "list" }, data: { type: "array", items: { oneOf: [{ allOf: [{ type: "object", properties: { status: { const: "ok" } } }, { $ref: "#/components/schemas/Verification" }] }, { $ref: "#/components/schemas/ItemError" }] } }, summary: { type: "object", properties: { total: { type: "integer" }, original: { type: "integer" }, issued_copy: { type: "integer" }, derived_copy: { type: "integer" }, derived_unattributed: { type: "integer" }, unknown: { type: "integer" }, errors: { type: "integer" } } } } },
         Formats: { type: "object", properties: { object: { const: "provenance.formats" }, decode: { type: "object", properties: { native: { type: "array", items: { type: "string" } }, worker: { type: "array", items: { type: "string" } }, worker_configured: { type: "boolean" } } }, register: { type: "array", items: { type: "string" } }, verify: { type: "array", items: { type: "string" } }, detect: { type: "array", items: { type: "string" } }, limits: { type: "object" }, methods: { type: "array", items: { type: "string" } } } },
+        WebhookCreate: { type: "object", properties: { url: { type: "string", format: "uri", description: "https only, public host." }, events: { type: "array", items: { type: "string", enum: ["asset.registered", "issuance.created", "detection.completed", "detection.attributed", "commit.created", "ping", "*"] }, description: "Defaults to all events." }, description: { type: "string" } }, required: ["url"] },
+        WebhookUpdate: { type: "object", properties: { url: { type: "string" }, events: { type: "array", items: { type: "string" } }, description: { type: "string" }, active: { type: "boolean" }, rotate_secret: { type: "boolean" } } },
+        Webhook: { type: "object", properties: { id: { type: "string" }, object: { const: "webhook.endpoint" }, url: { type: "string" }, description: { type: ["string", "null"] }, events: { type: "array", items: { type: "string" } }, active: { type: "boolean" }, created_at: { type: "string" }, updated_at: { type: "string" }, links: { type: "object" } } },
+        WebhookWithSecret: { allOf: [{ $ref: "#/components/schemas/Webhook" }, { type: "object", properties: { secret: { type: "string", description: "Shown once." } } }] },
+        WebhookList: { type: "object", properties: { object: { const: "list" }, events: { type: "array", items: { type: "string" } }, data: { type: "array", items: { $ref: "#/components/schemas/Webhook" } } } },
+        Delivery: { type: "object", properties: { id: { type: "string" }, object: { const: "webhook.delivery" }, endpoint_id: { type: "string" }, event: { type: "string" }, status: { type: "string", enum: ["pending", "sending", "delivered", "failed"] }, attempt: { type: "integer" }, next_attempt_at: { type: ["string", "null"] }, last_status: { type: ["integer", "null"] }, last_error: { type: ["string", "null"] }, created_at: { type: "string" }, delivered_at: { type: ["string", "null"] }, payload: { type: "object", description: "The event body as sent: { id, object: 'event', event, created_at, org_id, data }." } } },
+        DeliveryList: { type: "object", properties: { object: { const: "list" }, endpoint_id: { type: "string" }, data: { type: "array", items: { $ref: "#/components/schemas/Delivery" } } } },
         RepoCreate: { type: "object", properties: { name: { type: "string" }, slug: { type: "string" }, description: { type: "string" }, daw: { type: "string", description: "e.g. ableton, fl-studio, logic, pro-tools, cubase, reaper, bitwig" }, default_branch: { type: "string", default: "main" } }, required: ["name"] },
         Repo: { type: "object", properties: { id: { type: "string" }, object: { const: "vault.repo" }, name: { type: "string" }, slug: { type: "string" }, description: { type: ["string", "null"] }, daw: { type: ["string", "null"] }, default_branch: { type: "string" }, created_at: { type: "string" }, updated_at: { type: "string" }, links: { type: "object" } } },
         RepoList: { type: "object", properties: { object: { const: "list" }, data: { type: "array", items: { $ref: "#/components/schemas/Repo" } } } },

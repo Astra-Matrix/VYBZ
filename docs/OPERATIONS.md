@@ -93,6 +93,8 @@ While the key and the Vault values disagree, checkout fails and webhook signatur
 
 **Monthly overages.** The pg_cron job `billing-usage-report` (migration 0119) runs `run_billing_usage_report()` on the 1st of each month at 06:00 UTC. Inspect with `select * from cron.job_run_details order by start_time desc limit 5;` and `select * from net._http_response order by id desc limit 5;`. It computes last month's usage beyond the plan's included quantities for every Business and Enterprise organization with an active subscription and creates Stripe invoice items on the customer, which land on the next subscription invoice. Rates: $0.02 per issuance, $0.10 per detection, $0.015 per GB-month. Idempotent via `billing_usage_reports`; `?dry_run=1` previews, `?period=YYYY-MM-01` re-targets a month.
 
+**Webhook backlog.** `select status, count(*) from webhook_deliveries group by 1;`. The pg_cron job `webhook-dispatch` runs every minute and the gateway dispatches immediately after each event; `select * from cron.job_run_details where jobid = (select jobid from cron.job where jobname = 'webhook-dispatch') order by start_time desc limit 5;` shows the sweep. Responses arrive through pg_net into `net._http_response` and are reconciled on the next pass. Endpoints that fail six times leave deliveries `failed`; the customer retries them from the console or the API. `webhook-deliveries-prune` drops rows older than 30 days at 04:30 UTC.
+
 **Rate bucket growth.** `select public.api_rate_buckets_prune();` on a daily schedule (Supabase cron).
 
 **Large detection latency.** Decoding dominates for long files; correlation is one 8192-point FFT per issuance. If an asset exceeds ~5,000 issuances, advise the customer to register per-campaign variants.

@@ -13,6 +13,6 @@ describe("consoleApi helpers", () => {
     expect(fmtBytes(1099511627776)).toBe("1.00 TB");
   });
   it("exposes the six API scopes", () => {
-    expect(SCOPES.map((s) => s.id)).toEqual(["org:read", "provenance:read", "provenance:write", "provenance:detect", "vault:read", "vault:write"]);
+    expect(SCOPES.map((s) => s.id)).toEqual(["org:read", "provenance:read", "provenance:write", "provenance:detect", "vault:read", "vault:write", "webhooks:manage"]);
   });
 });

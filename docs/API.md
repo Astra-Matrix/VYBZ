@@ -27,7 +27,7 @@ Base URL `https://vybz.cloud/v1`. Machine-readable: [`/v1/openapi.json`](https:/
 | 409 | `checksum_mismatch`, `slug_taken`, `missing_blobs`, `head_moved`, `branch_exists` | Conflict; the extra fields say what to fix. |
 | 413 | `payload_too_large` | |
 | 415 | `unsupported_media_type` | JSON or multipart expected. |
-| 422 | `unsupported_audio`, `undecodable_audio`, `lossless_required`, `invalid_url`, `url_not_allowed`, `fetch_failed`, `too_many_items`, `invalid_multipart`, `invalid_recipient`, `invalid_entries`, `invalid_path`, `invalid_hash`, `invalid_branch`, … | Validation. Audio errors carry `supported` (formats) in extra. |
+| 422 | `unsupported_audio`, `undecodable_audio`, `lossless_required`, `invalid_url`, `url_not_allowed`, `fetch_failed`, `too_many_items`, `invalid_multipart`, `invalid_events`, `too_many_endpoints`, `invalid_recipient`, `invalid_entries`, `invalid_path`, `invalid_hash`, `invalid_branch`, … | Validation. Audio errors carry `supported` (formats) in extra. |
 | 429 | `rate_limited` | |
 | 503 | `not_configured` | Watermarking secret absent on this deployment. |
 | 500 | `internal_error`, `db_error`, `storage_error` | Retry with backoff; include the request id when reporting. |
@@ -118,6 +118,48 @@ Formats decoded in the edge, formats routed to the decode worker (and whether on
 
 ### `GET /provenance/chain` — `provenance:read`
 Recomputes the organization's hash chain: `{ ok, length, first_bad_seq }`.
+
+## Webhooks
+
+Events are delivered to https endpoints as signed JSON. Scope `webhooks:manage` for writes, `org:read` for reads. Up to 20 endpoints per organization.
+
+| Event | Fires | `data` |
+|---|---|---|
+| `asset.registered` | An original was registered. | Asset |
+| `issuance.created` | A watermarked copy was issued. | Issuance plus `asset { id, title }` |
+| `detection.completed` | A detection ran, from `detect` or from `verify` with `attribute=true`. | Detection summary without the match list |
+| `detection.attributed` | A detection attributed a recipient. | Same as above |
+| `commit.created` | A Vault commit advanced a branch. | Commit plus `repo { id, slug, name }` |
+| `ping` | `POST /webhooks/{id}/test`. | `{ endpoint_id, message }` |
+
+Body: `{ "id", "object": "event", "event", "created_at", "org_id", "data" }`. Headers: `X-VYBZ-Event`, `X-VYBZ-Delivery` (the event id, stable across retries), `X-VYBZ-Attempt`, `X-VYBZ-Signature`.
+
+**Verifying a signature.** `X-VYBZ-Signature` is `t=<unix seconds>,v1=<hex>` where `v1 = HMAC-SHA256(secret, t + "." + raw_body)`. Compare in constant time and reject timestamps older than five minutes to defeat replay.
+
+```ts
+import { createHmac, timingSafeEqual } from "node:crypto";
+export function verifyVybz(secret: string, header: string, rawBody: string): boolean {
+  const t = /t=(\d+)/.exec(header)?.[1], v1 = /v1=([a-f0-9]+)/.exec(header)?.[1];
+  if (!t || !v1 || Math.abs(Date.now() / 1000 - Number(t)) > 300) return false;
+  const expected = createHmac("sha256", secret).update(`${t}.${rawBody}`).digest("hex");
+  return expected.length === v1.length && timingSafeEqual(Buffer.from(expected), Buffer.from(v1));
+}
+```
+
+Answer `2xx` within 15 seconds. Anything else is retried after 1 minute, 5 minutes, 30 minutes, 2 hours, and 12 hours, then marked `failed`. Deliveries are kept for 30 days.
+
+### `POST /webhooks` — `webhooks:manage`
+JSON `{ "url", "events"?: [...], "description"? }`. `events` defaults to all (`"*"`). Returns `201` with the endpoint and its `secret`, shown once.
+
+### `GET /webhooks` · `GET /webhooks/{id}` — `org:read`
+### `PATCH /webhooks/{id}` — `webhooks:manage`
+Any of `url`, `events`, `description`, `active`. `"rotate_secret": true` returns a new secret once.
+### `DELETE /webhooks/{id}` — `webhooks:manage`
+### `POST /webhooks/{id}/test` — `webhooks:manage`
+Queues a `ping` and dispatches. `202`.
+### `GET /webhooks/{id}/deliveries?status=&limit=` — `org:read`
+Recent deliveries with `status`, `attempt`, `last_status`, `last_error`, and the `payload` as sent.
+### `POST /webhooks/{id}/deliveries/{delivery}/retry` — `webhooks:manage`
 
 ## Vault
 
