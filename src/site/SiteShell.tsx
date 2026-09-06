@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { NavLink, Link, useLocation } from "react-router-dom";
 import { useSession } from "@/store/session";
+import { applySeo, seoFor } from "./seo";
 import "./site.css";
 
 const NAV = [
@@ -15,6 +16,7 @@ export function SiteShell({ children, wide = false }: { children: ReactNode; wid
   const { userId, signOut } = useSession();
   const location = useLocation();
   useEffect(() => {
+    applySeo(seoFor(location.pathname));
     window.scrollTo({ top: 0 });
   }, [location.pathname]);
 

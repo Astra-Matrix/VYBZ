@@ -1,6 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
+  "trailingSlash": false,
   "buildCommand": "npm run validate",
   "outputDirectory": "dist",
   "installCommand": "npm install",
@@ -31,12 +32,8 @@
       "destination": "https://xixmneooyufbeftdfpcm.supabase.co/functions/v1/api-v1/v1/:path*"
     },
     {
-      "source": "/api/ai-review/manifest",
-      "destination": "/api/ai-review/manifest"
-    },
-    {
       "source": "/((?!api/|v1/|v1$|sw\\.js$|workbox-).*)",
-      "destination": "/index.html"
+      "destination": "/app.html"
     }
   ],
   "headers": [
@@ -110,7 +107,7 @@
       ]
     },
     {
-      "source": "/index.html",
+      "source": "/(index\\.html|app\\.html)",
       "headers": [
         {
           "key": "Cache-Control",
