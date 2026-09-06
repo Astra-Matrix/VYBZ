@@ -2,11 +2,11 @@ name: CI
 
 on:
   push:
-    branches: [main, suite-genesis, phase11-perf-ui]
+    branches: [main]
   pull_request:
 
 jobs:
-  quality:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,58 +15,11 @@ jobs:
           node-version: "20"
           cache: npm
       - run: npm ci
-      - name: Lint (TypeScript)
-        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
       - name: Unit tests
-        run: npm run test
+        run: npm test
       - name: Production build
         run: npm run build
-      - name: Guard — no e2e fixtures in the production bundle
-        run: npm run check:no-fixtures
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
-      - name: E2E build (fixtures enabled — not deployable)
-        run: npm run build:e2e
-      - name: E2E + a11y smoke
-        run: npm run test:e2e
-        env:
-          CI: true
-          PLAYWRIGHT_SKIP_BUILD: "1"
-
-  perf-audit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-      - run: npm ci
-      - name: Production build
-        run: npm run build
-      - name: Lighthouse (≥90 perf & best-practices)
-        run: npm run perf:audit
-
-  load-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup k6
-        uses: grafana/setup-k6-action@v1
-      - name: K6 pack + checkout (p95 < 800ms)
-        run: k6 run tooling/k6/pack_checkout.js
-        env:
-          BASE_URL: https://vybz.cloud
-          FUNCTIONS_URL: https://xixmneooyufbeftdfpcm.supabase.co/functions/v1
-
-  ai-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-      - run: npm ci
-      - name: AI mastering golden RMS (≤0.3 dB)
-        run: npm run ai:test
+      - name: MCP server build
+        run: npm run mcp:build

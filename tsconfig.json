@@ -17,25 +17,8 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"],
-      "@vybz/contracts": ["src/contracts/index.ts"],
-      "@vybz/contracts/*": ["src/contracts/*"],
-      "@vybz/platform": ["src/platform/bridge/index.ts"],
-      "@vybz/platform/*": ["src/platform/*"],
-      "@vybz/domain": ["src/domain/index.ts"],
-      "@vybz/domain/*": ["src/domain/*"],
-      "@vybz/domain/releases": ["packages/domain/releases/src/index.ts"],
-      "@vybz/data/releases": ["packages/data/releases/src/index.ts"],
-      "@vybz/domain/collab": ["packages/domain/collab/src/index.ts"],
-      "@vybz/domain/credits": ["packages/domain/credits/src/index.ts"],
-      "@vybz/data/credits": ["packages/data/credits/src/index.ts"],
-      "@vybz/processing/readiness": ["packages/processing/readiness/src/index.ts"],
-      "@vybz/processing/readiness/worker": ["packages/processing/readiness/src/worker.ts"],
-      "@vybz/processing/waveform": ["packages/processing/waveform/src/index.ts"],
-      "@vybz/processing/mastering": ["packages/processing/mastering/src/index.ts"],
-      "@vybz/processing/metadata": ["packages/processing/metadata/src/index.ts"]
-    }
+    "paths": { "@/*": ["src/*"] },
+    "types": ["vitest/globals"]
   },
-  "include": ["src", "packages"]
+  "include": ["src", "packages/mcp-server/src"]
 }

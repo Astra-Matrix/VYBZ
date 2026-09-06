@@ -4,7 +4,7 @@ Ordered by revenue impact. Dates are targets, not promises.
 
 ## Now (Q4 2026)
 
-- **Metered overage billing.** Business subscription, developer caps, members, and invites shipped 2026-09-06. Remaining: report monthly overages to Stripe as usage records.
+- **Billing.** Shipped 2026-09-06: Business subscription, developer caps, members, invites, and monthly overage invoice items. Remaining: an in-console usage report history.
 - **Compressed input.** Server-side decode of MP3, AAC, FLAC for `verify` and `detect` so customers do not pre-convert.
 - **Chunked blob upload.** Resumable uploads for files above 500 MB.
 - **Webhooks.** `issuance.created`, `detection.attributed`, `commit.created` with signed payloads.
@@ -14,7 +14,7 @@ Ordered by revenue impact. Dates are targets, not promises.
 - **Batch issue.** One call, N recipients, a zip or a manifest of links.
 - **Detection queue.** Asynchronous detection for assets with very large issuance counts, with a job id and webhook.
 - **Watermark for delivered MP3.** Embed in the decoded domain and re-encode so customers who ship MP3 keep attribution.
-- **Auto-snapshot daemon.** Local watcher that commits a project folder after each save, derived from the existing folder-watch bridge.
+- **Auto-snapshot daemon.** Local watcher that commits a project folder after each save, derived from `tools/vybz-bridge`.
 - **Vault console.** Browse repositories, history, and diffs in the console; restore from the browser.
 
 ## Later

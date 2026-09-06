@@ -18,6 +18,7 @@ supabase db push                       # applies supabase/migrations/*
 supabase functions deploy api-v1 --no-verify-jwt --project-ref xixmneooyufbeftdfpcm
 supabase functions deploy billing-checkout --no-verify-jwt --project-ref xixmneooyufbeftdfpcm
 supabase functions deploy stripe-webhook --no-verify-jwt --project-ref xixmneooyufbeftdfpcm
+supabase functions deploy billing-usage-report --no-verify-jwt --project-ref xixmneooyufbeftdfpcm
 
 # 3. Secrets (Edge)
 supabase secrets set WM_SECRET="$(openssl rand -hex 32)" \
@@ -41,6 +42,7 @@ npm run validate && git push
 | `C2PA_WORKER_URL`, `C2PA_WORKER_TOKEN` | Supabase Edge | Content Credentials signer. |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Supabase Edge | Subscriptions. The webhook must subscribe to `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`. |
 | `STRIPE_PRICE_BUSINESS` | Supabase Edge | Optional recurring price id for the Business plan. Without it Checkout uses inline pricing at $249/month. |
+| `BILLING_CRON_SECRET` | Supabase Edge | Header `x-cron-secret` for `billing-usage-report`. Falls back to `DIGEST_CRON_SECRET`. |
 | `VYBZ_API_BASE` | Vercel | Hosted MCP → API base (default vybz.cloud/v1). |
 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | Vercel | Console client. |
 
@@ -58,11 +60,17 @@ Container on any glibc 2.39+ host (Ubuntu 24.04 image). `docker compose up -d --
 
 **Plan did not update after payment.** Check the Stripe webhook delivery for `checkout.session.completed` with `metadata.kind = org_plan`; replay it. `org_billing` holds the subscription id and status; `orgs.plan` is what the gateway enforces.
 
+**Monthly overages.** Schedule `POST …/functions/v1/billing-usage-report` on the 1st of each month at 06:00 UTC with header `x-cron-secret`. It computes last month's usage beyond the plan's included quantities for every Business and Enterprise organization with an active subscription and creates Stripe invoice items on the customer, which land on the next subscription invoice. Rates: $0.02 per issuance, $0.10 per detection, $0.015 per GB-month. Idempotent via `billing_usage_reports`; `?dry_run=1` previews, `?period=YYYY-MM-01` re-targets a month.
+
 **Rate bucket growth.** `select public.api_rate_buckets_prune();` on a daily schedule (Supabase cron).
 
 **Large detection latency.** Detection is O(issuances × samples). If an asset exceeds ~5,000 issuances, advise the customer to register per-campaign variants.
 
 **Storage growth.** Unique bytes per org: `select org_id, sum(size) from vault_blobs group by 1;` plus `provenance_assets.bytes`.
+
+## Repository shape
+
+The legacy creator application was removed from the tree on 2026-09-06. `src/` now contains only the platform site, console, session, and Supabase client. Native shells, Playwright suites, perf tooling, and legacy edge-function sources are gone; their deployed edge functions keep running until retired from the Supabase dashboard. `native/vlink` (VST3 capture node) and `tools/vybz-bridge` (folder watcher) remain as Vault extraction candidates.
 
 ## Local development
 

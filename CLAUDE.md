@@ -17,7 +17,7 @@ Humans use the **Console** (`/console`). Machines and AI agents use the **API** 
 ## Product direction (binding)
 
 - Ship for the buyer with a budget: sample libraries, sync houses, labels, distributors, AI music companies, studios, schools.
-- The creator-social app that previously lived at `/` is **legacy**. It stays compiled behind `VITE_FEATURE_LEGACY_CREATOR=on` only until its useful pieces are extracted, then it is removed. Do not add features to it.
+- The creator-social app that previously lived at `/` was removed from the tree on 2026-09-06. Do not restore it. `native/vlink` and `tools/vybz-bridge` remain only as Vault extraction candidates.
 - Every capability must be reachable three ways: Console (human), REST (machine), MCP tool (agent). If a feature lacks one of the three, it is unfinished.
 - Premium is the bar. Copy is short, precise, and confident. No exclamation marks, no emoji in product surfaces, no filler.
 
@@ -32,14 +32,14 @@ Humans use the **Console** (`/console`). Machines and AI agents use the **API** 
 | `src/site/` | Public site: home, product pages, docs, legal, sign in |
 | `src/console/` | Console: organizations, keys, usage, audit, agent setup |
 | `worker/c2pa/` | Optional Content Credentials signer (Node + c2patool, container host) |
+| `supabase/functions/billing-checkout`, `billing-usage-report`, `stripe-webhook` | Subscriptions, monthly overages, plan sync |
 | `docs/` | Official documentation |
-
-Legacy directories (`src/features`, `src/pages`, `src/shell`, `src/components`, `native/`, `apps/desktop`, `android/`, `ios/`, `tools/vybz-bridge`) are untouched until extraction. Read them only when extracting.
 
 ## Working rules
 
 - `npm run validate` must pass before a commit: typecheck, tests, build.
-- Secrets never appear in `VITE_*`. Keys: `WM_SECRET`, `C2PA_WORKER_URL`, `C2PA_WORKER_TOKEN`, `API_PUBLIC_BASE` are Supabase Edge secrets.
+- Secrets never appear in `VITE_*`. `WM_SECRET`, `C2PA_WORKER_URL`, `C2PA_WORKER_TOKEN`, `API_PUBLIC_BASE`, `STRIPE_*`, `BILLING_CRON_SECRET` are Supabase Edge secrets.
+- Deploying: the Supabase CLI is not authenticated on the dev machine; edge functions are deployed through the Supabase connector with inline sources, migrations through `apply_migration`, followed by `notify pgrst, 'reload schema'`. Service-role RPCs need an explicit grant after revoking from public.
 - API changes update three things together: `api-v1/index.ts`, `_shared/openapi.ts`, `docs/API.md`. MCP tool changes update `packages/mcp-server/src/tools.ts` and `docs/AGENTS.md`.
 - Migrations are additive and paired with a `.down.sql`.
 - Commit messages: imperative, scoped (`api:`, `console:`, `mcp:`, `docs:`, `db:`).

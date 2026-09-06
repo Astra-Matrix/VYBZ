@@ -1,4 +1,0 @@
-storePassword=REPLACE_ME
-keyPassword=REPLACE_ME
-keyAlias=vybz
-storeFile=keystore/vybz-upload.jks

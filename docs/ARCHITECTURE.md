@@ -54,12 +54,12 @@ Commits store their complete tree inline as JSON (path, hash, size). This keeps 
 
 ## Front end
 
-`src/site` and `src/console` are self-contained: their own stylesheet (`site.css`), no dependency on the legacy creator theme. `App.tsx` routes any site path to `SiteApp` before the legacy tree is considered; with `VITE_FEATURE_LEGACY_CREATOR` off, every other path redirects to `/`.
+`src/site` and `src/console` are the whole front end: their own stylesheet (`site.css`), a thin session provider over Supabase Auth, and the Supabase client. `App.tsx` renders `SiteApp`; unknown paths redirect to `/`.
 
 Docs are Markdown in `docs/` imported at build time and rendered with `marked`; the same files are the repository documentation.
 
 ## Legacy
 
-The creator application (social, live, tools, native shells) remains in the tree behind a flag. It shares Supabase Auth and the `profiles` table but none of the platform tables. Extraction candidates: the VST3 capture node (`native/vlink`) as a Vault capture source; the folder watcher (`tools/vybz-bridge`) as a local auto-snapshot daemon.
+The creator application was removed from the repository on 2026-09-06. Its database tables and deployed edge functions still exist in the Supabase project and are inert; retire them from the dashboard when convenient. Two pieces were kept for extraction: the VST3 capture node (`native/vlink`) as a Vault capture source, and the folder watcher (`tools/vybz-bridge`) as a local auto-snapshot daemon.
 
 Last updated: 2026-09-05

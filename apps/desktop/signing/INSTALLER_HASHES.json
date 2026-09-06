@@ -1,9 +1,0 @@
-{
-  "recordedAt": "2026-07-30T06:22:17.803Z",
-  "status": "toolchain_missing",
-  "note": "Rust/Tauri toolchain not installed — unsigned installer hash deferred",
-  "channel": "stable",
-  "version": "1.1.0",
-  "sha256": null,
-  "path": null
-}
