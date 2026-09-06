@@ -6,7 +6,24 @@ export function openapiDocument(base: string) {
   const bearer = [{ apiKey: [] }];
   const err = (desc: string) => ({ description: desc, content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } });
   const jsonOf = (ref: string, desc = "OK") => ({ description: desc, content: { "application/json": { schema: { $ref: `#/components/schemas/${ref}` } } } });
-  const wavBody = (desc: string) => ({ required: true, description: desc, content: { "audio/wav": { schema: { type: "string", format: "binary" } } } });
+  const bin = { schema: { type: "string", format: "binary" } };
+  const audioBody = (desc: string) => ({
+    required: true,
+    description: desc,
+    content: { "audio/wav": bin, "audio/aiff": bin, "audio/flac": bin, "audio/mpeg": bin, "audio/ogg": bin, "audio/opus": bin, "audio/mp4": bin, "application/octet-stream": bin, "multipart/form-data": { schema: { type: "object", properties: { file: { type: "string", format: "binary" } } } } },
+  });
+  const batchBody = (desc: string, extra: Record<string, unknown> = {}) => ({
+    required: true,
+    description: desc,
+    content: {
+      "multipart/form-data": { schema: { type: "object", properties: { files: { type: "array", items: { type: "string", format: "binary" } }, ...extra } } },
+      "application/json": { schema: { type: "object", properties: { items: { type: "array", maxItems: 25, items: { type: "object", properties: { url: { type: "string", format: "uri" }, name: { type: "string" } }, required: ["url"] } }, ...extra }, required: ["items"] } },
+    },
+  });
+  const attributeParams = [
+    { name: "attribute", in: "query", schema: { type: "boolean", default: false }, description: "Run watermark attribution when an original is identified or `asset` is given. Metered as one detection per file. Requires `provenance:detect`." },
+    { name: "asset", in: "query", schema: { type: "string" }, description: "Asset id to test the watermark against when the file cannot be identified by fingerprint." },
+  ];
   const idParam = (name: string, desc: string) => ({ name, in: "path", required: true, schema: { type: "string" }, description: desc });
 
   return {
@@ -38,14 +55,14 @@ export function openapiDocument(base: string) {
       "/provenance/assets": {
         post: {
           tags: ["Provenance"], summary: "Register an original",
-          description: "Send the PCM WAV bytes as the request body. The file is hashed, stored privately, and becomes an asset you can issue from. Re-registering identical bytes returns the existing asset.",
+          description: "Send a lossless original (WAV, AIFF, or FLAC) as the request body or as one multipart part. The file is stored as sent, hashed both as bytes and as canonical PCM, fingerprinted for later identification, and becomes an asset you can issue from. Re-registering identical bytes returns the existing asset. Lossy formats are refused with `lossless_required`.",
           parameters: [
             { name: "X-VYBZ-Title", in: "header", schema: { type: "string" } },
             { name: "X-VYBZ-External-Ref", in: "header", schema: { type: "string" }, description: "Your own id for this recording." },
             { name: "X-VYBZ-Content-SHA256", in: "header", schema: { type: "string" }, description: "Optional integrity check." },
           ],
-          requestBody: wavBody("Raw WAV bytes (16/24/32-bit PCM or 32-bit float)."),
-          responses: { "201": jsonOf("Asset", "Registered"), "200": jsonOf("Asset", "Already registered"), "422": err("Not a PCM WAV"), "413": err("Too large"), "402": err("Plan limit reached") },
+          requestBody: audioBody("WAV (8 to 32-bit PCM or float, including extensible), AIFF/AIFC, or FLAC."),
+          responses: { "201": jsonOf("Asset", "Registered"), "200": jsonOf("Asset", "Already registered"), "422": err("Not lossless audio (`lossless_required`, `unsupported_audio`)"), "413": err("Too large"), "402": err("Plan limit reached") },
         },
         get: { tags: ["Provenance"], summary: "List assets", parameters: [{ name: "limit", in: "query", schema: { type: "integer", maximum: 200 } }], responses: { "200": jsonOf("AssetList") } },
       },
@@ -67,19 +84,42 @@ export function openapiDocument(base: string) {
       "/provenance/assets/{id}/detect": {
         post: {
           tags: ["Provenance"], summary: "Attribute a suspect file",
-          description: "Blind, alignment-tolerant correlation of the suspect audio against every copy issued for this asset. Returns ranked candidates and, when the evidence is decisive, the attributed issuance.",
+          description: "Blind, alignment-tolerant correlation of the suspect audio against every copy issued for this asset. Accepts any supported format (see `/provenance/formats`); the suspect is decoded and resampled to the asset's rate. Returns ranked candidates and, when the evidence is decisive, the attributed issuance. Metered as one detection.",
           parameters: [idParam("id", "Asset id")],
-          requestBody: wavBody("Suspect audio as PCM WAV. Decode compressed formats first."),
-          responses: { "200": jsonOf("Detection"), "422": err("Not a PCM WAV"), "402": err("Plan limit reached") },
+          requestBody: audioBody("Suspect audio in any supported format, raw or as one multipart part."),
+          responses: { "200": jsonOf("Detection"), "422": err("Undecodable or unsupported audio"), "402": err("Plan limit reached") },
+        },
+      },
+      "/provenance/assets/{id}/detect/batch": {
+        post: {
+          tags: ["Provenance"], summary: "Attribute many suspect files",
+          description: "Up to 25 files per call, as multipart parts or as URLs to fetch. Each file is processed independently and metered as one detection; failures are reported per item.",
+          parameters: [idParam("id", "Asset id")],
+          requestBody: batchBody("Files or URLs."),
+          responses: { "200": jsonOf("DetectionBatch"), "413": err("Too large"), "422": err("Too many items") },
         },
       },
       "/provenance/verify": {
         post: {
-          tags: ["Provenance"], summary: "Verify a file by exact hash",
-          description: "Answers whether these exact bytes are a registered original or an issued copy of this organization, and for whom.",
-          requestBody: { required: true, content: { "application/octet-stream": { schema: { type: "string", format: "binary" } }, "audio/wav": { schema: { type: "string", format: "binary" } } } },
-          responses: { "200": jsonOf("Verification") },
+          tags: ["Provenance"], summary: "Verify a file",
+          description:
+            "Establishes what a file is using every method available, each reported as evidence: exact byte hash, canonical PCM hash (same audio in any lossless container), perceptual fingerprint (which original it derives from and at what offset, without an asset id), Content Credentials presence cross-checked against the record, and, with `attribute=true`, watermark attribution on the identified asset. Any supported format. Verification is free; attribution is metered.",
+          parameters: attributeParams,
+          requestBody: audioBody("Any file, raw or as one multipart part. Non-audio bytes are checked by exact hash only."),
+          responses: { "200": jsonOf("Verification"), "413": err("Too large") },
         },
+      },
+      "/provenance/verify/batch": {
+        post: {
+          tags: ["Provenance"], summary: "Verify many files",
+          description: "Up to 25 files per call, as multipart parts or as URLs to fetch. Same evidence per file as `/provenance/verify`; failures are reported per item.",
+          parameters: attributeParams,
+          requestBody: batchBody("Files or URLs.", { attribute: { type: "boolean" }, asset: { type: "string" } }),
+          responses: { "200": jsonOf("VerificationBatch"), "413": err("Too large"), "422": err("Too many items") },
+        },
+      },
+      "/provenance/formats": {
+        get: { tags: ["Provenance"], summary: "Supported input formats and limits", responses: { "200": jsonOf("Formats") } },
       },
       "/provenance/chain": { get: { tags: ["Provenance"], summary: "Verify the organization's whole ledger chain", responses: { "200": { description: "{ ok, length, first_bad_seq }" } } } },
 
@@ -119,18 +159,45 @@ export function openapiDocument(base: string) {
     },
     components: {
       securitySchemes: {
-        apiKey: { type: "http", scheme: "bearer", bearerFormat: "vybz_live_<48 hex>", description: "Organization API key from the VYBZ Console. Scopes: org:read, provenance:read, provenance:write, provenance:detect, vault:read, vault:write." },
+        apiKey: { type: "http", scheme: "bearer", bearerFormat: "vybz_live_<48 hex>", description: "Organization API key from the VYBZ Console. Scopes: org:read, provenance:read, provenance:write, provenance:detect, vault:read, vault:write. The console itself calls the API with a user session and `X-VYBZ-Org`; integrations use keys." },
       },
       schemas: {
         Error: { type: "object", properties: { error: { type: "object", properties: { code: { type: "string" }, message: { type: "string" }, request_id: { type: "string" }, docs: { type: "string" } }, required: ["code", "message", "request_id"] } } },
-        Asset: { type: "object", properties: { id: { type: "string" }, object: { const: "provenance.asset" }, title: { type: "string" }, external_ref: { type: ["string", "null"] }, sha256: { type: "string" }, bytes: { type: "integer" }, sample_rate: { type: ["integer", "null"] }, channels: { type: ["integer", "null"] }, duration_sec: { type: ["number", "null"] }, created_at: { type: "string" }, links: { type: "object" } } },
+        Asset: { type: "object", properties: { id: { type: "string" }, object: { const: "provenance.asset" }, title: { type: "string" }, external_ref: { type: ["string", "null"] }, sha256: { type: "string" }, pcm_sha256: { type: ["string", "null"], description: "Hash of the decoded audio; the same across lossless containers." }, source_format: { type: ["string", "null"] }, fingerprint_frames: { type: ["integer", "null"] }, bytes: { type: "integer" }, mime: { type: "string" }, sample_rate: { type: ["integer", "null"] }, channels: { type: ["integer", "null"] }, duration_sec: { type: ["number", "null"] }, created_at: { type: "string" }, links: { type: "object" } } },
         AssetList: { type: "object", properties: { object: { const: "list" }, data: { type: "array", items: { $ref: "#/components/schemas/Asset" } } } },
         IssueRequest: { type: "object", properties: { recipient: { type: "string", description: "Your stable identifier for the receiving party (email, account id, partner name)." }, license: { type: "string" }, store: { type: "boolean", description: "Store the delivered copy and return a download link instead of bytes." }, c2pa: { type: "boolean", default: true } }, required: ["recipient"] },
-        Issuance: { type: "object", properties: { id: { type: "string" }, object: { const: "provenance.issuance" }, asset_id: { type: "string" }, recipient: { type: "string" }, license: { type: ["string", "null"] }, watermark_id: { type: "string" }, delivered_sha256: { type: "string" }, c2pa_signed: { type: "boolean" }, created_at: { type: "string" } } },
+        Issuance: { type: "object", properties: { id: { type: "string" }, object: { const: "provenance.issuance" }, asset_id: { type: "string" }, recipient: { type: "string" }, license: { type: ["string", "null"] }, watermark_id: { type: "string" }, delivered_sha256: { type: "string" }, pcm_sha256: { type: ["string", "null"] }, c2pa_signed: { type: "boolean" }, created_at: { type: "string" } } },
         IssuanceWithDownload: { allOf: [{ $ref: "#/components/schemas/Issuance" }, { type: "object", properties: { bytes: { type: "integer" }, download: { type: "object", properties: { url: { type: "string" }, expires_in: { type: "integer" } } } } }] },
         IssuanceList: { type: "object", properties: { object: { const: "list" }, data: { type: "array", items: { $ref: "#/components/schemas/Issuance" } } } },
-        Detection: { type: "object", properties: { object: { const: "provenance.detection" }, asset_id: { type: "string" }, suspect_sha256: { type: "string" }, confidence: { type: "string", enum: ["exact", "high", "medium", "none"] }, attributed: { type: ["object", "null"], properties: { issuance_id: { type: "string" }, recipient: { type: "string" }, watermark_id: { type: "string" }, score: { type: "number" }, exact: { type: "boolean" } } }, statistics: { type: "object", properties: { z: { type: ["number", "null"] }, ratio: { type: ["number", "null"] } } }, matches: { type: "array", items: { type: "object" } }, candidates: { type: "integer" } } },
-        Verification: { type: "object", properties: { object: { const: "provenance.verification" }, sha256: { type: "string" }, known: { type: "boolean" }, kind: { type: "string", enum: ["original", "issued_copy", "unknown"] }, asset: { type: ["object", "null"] }, issuance: { type: ["object", "null"] }, hint: { type: ["string", "null"] } } },
+        Input: { type: "object", description: "What was received and how it was decoded.", properties: { sha256: { type: "string" }, bytes: { type: "integer" }, format: { type: "string" }, codec: { type: "string" }, container: { type: "string" }, mime: { type: "string" }, decoded: { type: "boolean" }, decoder: { type: ["string", "null"], enum: ["native", "worker", null] }, decode_error: { type: ["object", "null"] }, sample_rate: { type: ["integer", "null"] }, channels: { type: ["integer", "null"] }, duration_sec: { type: ["number", "null"] }, analyzed_sec: { type: ["number", "null"] }, truncated: { type: "boolean", description: "True when the analysis cap cut the decoded audio; PCM hashing is skipped in that case." } } },
+        Detection: { type: "object", properties: { object: { const: "provenance.detection" }, name: { type: "string" }, asset_id: { type: "string" }, suspect_sha256: { type: "string" }, input: { $ref: "#/components/schemas/Input" }, analyzed_sec: { type: "number" }, resampled_from: { type: ["integer", "null"], description: "Suspect sample rate when it differed from the asset and was resampled." }, confidence: { type: "string", enum: ["exact", "high", "medium", "none"] }, attributed: { type: ["object", "null"], properties: { issuance_id: { type: "string" }, recipient: { type: "string" }, watermark_id: { type: "string" }, score: { type: "number" }, exact: { type: "boolean" } } }, statistics: { type: "object", properties: { z: { type: ["number", "null"] }, ratio: { type: ["number", "null"] } } }, matches: { type: "array", items: { type: "object" } }, candidates: { type: "integer" } } },
+        DetectionBatch: { type: "object", properties: { object: { const: "list" }, asset_id: { type: "string" }, data: { type: "array", items: { oneOf: [{ allOf: [{ type: "object", properties: { status: { const: "ok" } } }, { $ref: "#/components/schemas/Detection" }] }, { $ref: "#/components/schemas/ItemError" }] } }, summary: { type: "object", properties: { total: { type: "integer" }, attributed: { type: "integer" }, errors: { type: "integer" } } } } },
+        ItemError: { type: "object", properties: { name: { type: "string" }, status: { const: "error" }, error: { type: "object", properties: { code: { type: "string" }, message: { type: "string" } } } } },
+        Evidence: {
+          type: "object",
+          description: "One verification method and its outcome. `method` is one of exact_hash, pcm_hash, fingerprint, content_credentials, watermark. Fingerprint evidence adds asset_id, similarity (1 - bit error rate), offset_sec (where the suspect starts within the original), overlap_sec, and votes. Watermark evidence mirrors a Detection.",
+          properties: { method: { type: "string", enum: ["exact_hash", "pcm_hash", "fingerprint", "content_credentials", "watermark"] }, result: { type: "string", enum: ["match", "no_match", "attributed", "inconclusive", "present", "absent", "skipped", "not_requested"] }, reason: { type: "string" } },
+          additionalProperties: true,
+        },
+        Verification: {
+          type: "object",
+          properties: {
+            object: { const: "provenance.verification" },
+            name: { type: "string" },
+            sha256: { type: "string" },
+            known: { type: "boolean" },
+            kind: { type: "string", enum: ["original", "issued_copy", "derived", "unknown"] },
+            verdict: { type: "string", enum: ["original", "issued_copy", "derived_copy", "derived_unattributed", "unknown"], description: "original: the registered original bytes or audio. issued_copy: a copy we issued, byte- or PCM-identical. derived_copy: altered audio attributed to a recipient by watermark. derived_unattributed: derives from a known original but no recipient could be established. unknown: nothing matched." },
+            confidence: { type: "string", enum: ["exact", "high", "medium", "none"] },
+            input: { $ref: "#/components/schemas/Input" },
+            asset: { type: ["object", "null"] },
+            issuance: { type: ["object", "null"] },
+            evidence: { type: "array", items: { $ref: "#/components/schemas/Evidence" } },
+            hint: { type: ["string", "null"] },
+          },
+        },
+        VerificationBatch: { type: "object", properties: { object: { const: "list" }, data: { type: "array", items: { oneOf: [{ allOf: [{ type: "object", properties: { status: { const: "ok" } } }, { $ref: "#/components/schemas/Verification" }] }, { $ref: "#/components/schemas/ItemError" }] } }, summary: { type: "object", properties: { total: { type: "integer" }, original: { type: "integer" }, issued_copy: { type: "integer" }, derived_copy: { type: "integer" }, derived_unattributed: { type: "integer" }, unknown: { type: "integer" }, errors: { type: "integer" } } } } },
+        Formats: { type: "object", properties: { object: { const: "provenance.formats" }, decode: { type: "object", properties: { native: { type: "array", items: { type: "string" } }, worker: { type: "array", items: { type: "string" } }, worker_configured: { type: "boolean" } } }, register: { type: "array", items: { type: "string" } }, verify: { type: "array", items: { type: "string" } }, detect: { type: "array", items: { type: "string" } }, limits: { type: "object" }, methods: { type: "array", items: { type: "string" } } } },
         RepoCreate: { type: "object", properties: { name: { type: "string" }, slug: { type: "string" }, description: { type: "string" }, daw: { type: "string", description: "e.g. ableton, fl-studio, logic, pro-tools, cubase, reaper, bitwig" }, default_branch: { type: "string", default: "main" } }, required: ["name"] },
         Repo: { type: "object", properties: { id: { type: "string" }, object: { const: "vault.repo" }, name: { type: "string" }, slug: { type: "string" }, description: { type: ["string", "null"] }, daw: { type: ["string", "null"] }, default_branch: { type: "string" }, created_at: { type: "string" }, updated_at: { type: "string" }, links: { type: "object" } } },
         RepoList: { type: "object", properties: { object: { const: "list" }, data: { type: "array", items: { $ref: "#/components/schemas/Repo" } } } },

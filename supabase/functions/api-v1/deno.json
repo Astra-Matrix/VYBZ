@@ -1,0 +1,8 @@
+{
+  "imports": {
+    "mpg123-decoder": "npm:mpg123-decoder@1.0.3",
+    "@wasm-audio-decoders/flac": "npm:@wasm-audio-decoders/flac@0.2.11",
+    "@wasm-audio-decoders/ogg-vorbis": "npm:@wasm-audio-decoders/ogg-vorbis@0.1.20",
+    "ogg-opus-decoder": "npm:ogg-opus-decoder@1.7.5"
+  }
+}

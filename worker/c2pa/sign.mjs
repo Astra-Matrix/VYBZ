@@ -41,7 +41,7 @@ export function buildManifest(meta) {
           watermark_id: meta.watermarkId ?? null,
           license: meta.license ?? null,
           issued_at: new Date().toISOString(),
-          platform: "vybz.astramatrix.xyz",
+          platform: "vybz.cloud",
         },
       },
     ],

@@ -54,7 +54,7 @@ function pnPeriod(key) {
 }
 
 /** In-place iterative radix-2 FFT (complex). len must be a power of 2. */
-function fft(re, im, inverse = false) {
+export function fft(re, im, inverse = false) {
   const n = re.length;
   for (let i = 1, j = 0; i < n; i++) {
     let bit = n >> 1;
@@ -115,18 +115,44 @@ export function embedChannel(x, key, alpha = 0.02) {
 }
 
 /**
- * Blind, desync-tolerant detection. The signal is folded modulo PERIOD (so the
- * repeated watermark adds constructively while unrelated audio averages toward
- * zero), then circularly cross-correlated with the candidate PN via FFT. The
- * peak (over all alignments) is the detection statistic — trimming/cropping only
- * shifts where the peak lands, so attribution survives it. ~0 for the wrong key.
+ * Fold accumulator. The detector's first step, summing the signal modulo PERIOD,
+ * does not depend on the candidate key, so it is computed once per channel and
+ * shared by every candidate. `add` accepts the signal in any chunking, which
+ * lets a decoder stream audio through without holding it whole.
  */
-export function detectChannel(x, key) {
+export class Folder {
+  constructor() {
+    this.acc = new Float64Array(PERIOD);
+    this.pos = 0;
+    this.samples = 0;
+  }
+  add(x) {
+    const acc = this.acc;
+    let j = this.pos;
+    for (let i = 0; i < x.length; i++) {
+      acc[j] += x[i];
+      if (++j === PERIOD) j = 0;
+    }
+    this.pos = j;
+    this.samples += x.length;
+    return this;
+  }
+}
+
+/** Fold a whole channel into PERIOD bins. */
+export function foldChannel(x) {
+  return new Folder().add(x).acc;
+}
+
+/**
+ * Blind, desync-tolerant detection on a folded channel. The fold makes the
+ * repeated watermark add constructively while unrelated audio averages toward
+ * zero; the fold is then circularly cross-correlated with the candidate PN via
+ * FFT. The peak over all alignments is the statistic, so trimming and cropping
+ * only move where the peak lands. ~0 for the wrong key. Scale-invariant (~0..1).
+ */
+export function detectFolded(acc, key) {
   const p = pnPeriod(key);
-  // Fold into PERIOD bins.
-  const acc = new Float64Array(PERIOD);
-  for (let i = 0; i < x.length; i++) acc[i % PERIOD] += x[i];
-  // Circular cross-correlation acc ⋆ p via FFT: IFFT( FFT(acc) * conj(FFT(p)) ).
   const ar = Float64Array.from(acc), ai = new Float64Array(PERIOD);
   const pr = Float64Array.from(p), pi = new Float64Array(PERIOD);
   fft(ar, ai); fft(pr, pi);
@@ -138,52 +164,69 @@ export function detectChannel(x, key) {
   fft(cr, ci, true);
   let peak = 0;
   for (let k = 0; k < PERIOD; k++) if (Math.abs(cr[k]) > peak) peak = Math.abs(cr[k]);
-  // Normalize by fold energy so the statistic is scale-invariant (~0..1).
   let accEnergy = 0;
   for (let k = 0; k < PERIOD; k++) accEnergy += acc[k] * acc[k];
   const norm = Math.sqrt(accEnergy) * Math.sqrt(PERIOD) || 1;
   return peak / norm;
 }
 
-// ── Minimal WAV (PCM 16/24/32-bit int + 32-bit float) codec ──────────────────
-export function parseWav(bytes) {
+/** Detection on an unfolded channel. Identical statistic to fold + detectFolded. */
+export function detectChannel(x, key) {
+  return detectFolded(foldChannel(x), key);
+}
+
+// ── Minimal WAV (PCM 8/16/24/32-bit int + 32/64-bit float, incl. WAVE_FORMAT_EXTENSIBLE) ──
+/**
+ * Parse a RIFF/WAVE file into Float32 channels in [-1, 1].
+ * `maxFrames` caps how much audio is decoded; `truncated` reports when the cap hit.
+ */
+export function parseWav(bytes, { maxFrames = Infinity } = {}) {
+  if (bytes.byteLength < 12) return null;
   const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (dv.getUint32(0, false) !== 0x52494646 /*RIFF*/ || dv.getUint32(8, false) !== 0x57415645 /*WAVE*/)
     return null;
   let off = 12, fmt = null, dataOff = -1, dataLen = 0;
   while (off + 8 <= dv.byteLength) {
     const id = dv.getUint32(off, false);
-    const sz = dv.getUint32(off + 4, true);
+    let sz = dv.getUint32(off + 4, true);
     if (id === 0x666d7420 /*fmt */) {
+      let audioFormat = dv.getUint16(off + 8, true);
+      if (audioFormat === 0xfffe && sz >= 40) audioFormat = dv.getUint16(off + 8 + 24, true); // EXTENSIBLE: sub-format GUID
       fmt = {
-        audioFormat: dv.getUint16(off + 8, true),
+        audioFormat,
         channels: dv.getUint16(off + 10, true),
         sampleRate: dv.getUint32(off + 12, true),
         bits: dv.getUint16(off + 22, true),
       };
     } else if (id === 0x64617461 /*data*/) {
-      dataOff = off + 8; dataLen = sz; break;
+      dataOff = off + 8;
+      if (sz === 0xffffffff || sz === 0 || off + 8 + sz > dv.byteLength) sz = dv.byteLength - dataOff; // streamed/unfinished header
+      dataLen = sz; break;
     }
     off += 8 + sz + (sz & 1);
   }
-  if (!fmt || dataOff < 0) return null;
+  if (!fmt || dataOff < 0 || !fmt.channels || !fmt.sampleRate) return null;
   const { channels, bits, audioFormat } = fmt;
   const bytesPer = bits >> 3;
-  const frames = Math.floor(dataLen / (bytesPer * channels));
-  const ch = Array.from({ length: channels }, () => new Float64Array(frames));
+  if (!bytesPer) return null;
+  const total = Math.floor(dataLen / (bytesPer * channels));
+  const frames = Math.min(total, maxFrames);
+  const ch = Array.from({ length: channels }, () => new Float32Array(frames));
   for (let f = 0; f < frames; f++) {
     for (let c = 0; c < channels; c++) {
       const p = dataOff + (f * channels + c) * bytesPer;
       let s;
       if (audioFormat === 3 && bits === 32) s = dv.getFloat32(p, true);
+      else if (audioFormat === 3 && bits === 64) s = dv.getFloat64(p, true);
       else if (bits === 16) s = dv.getInt16(p, true) / 32768;
       else if (bits === 24) { const b0 = dv.getUint8(p), b1 = dv.getUint8(p + 1), b2 = dv.getInt8(p + 2); s = ((b2 << 16) | (b1 << 8) | b0) / 8388608; }
       else if (bits === 32) s = dv.getInt32(p, true) / 2147483648;
+      else if (bits === 8) s = (dv.getUint8(p) - 128) / 128;
       else s = 0;
       ch[c][f] = s;
     }
   }
-  return { channels: ch, sampleRate: fmt.sampleRate, bits, audioFormat };
+  return { channels: ch, sampleRate: fmt.sampleRate, bits, audioFormat, frames, totalFrames: total, truncated: frames < total };
 }
 
 export function encodeWav({ channels, sampleRate }) {

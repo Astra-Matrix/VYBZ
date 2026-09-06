@@ -1,0 +1,9 @@
+{
+  "name": "vybz-decode-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ffmpeg decode service for the VYBZ API gateway (AAC, ALAC, MP4, MOV, WebM, WMA to float WAV).",
+  "engines": { "node": ">=20" },
+  "scripts": { "start": "node server.mjs" }
+}
