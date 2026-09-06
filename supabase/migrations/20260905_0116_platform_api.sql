@@ -375,16 +375,17 @@ $$;
 create or replace function public.api_key_authenticate(p_hash text)
 returns table (key_id uuid, org_id uuid, scopes text[], plan text, limited boolean, remaining int)
 language plpgsql security definer set search_path = public as $fn$
+#variable_conflict use_column
 declare k public.api_keys; m timestamptz := date_trunc('minute', now()); h int; p text;
 begin
-  select * into k from public.api_keys where key_hash = p_hash;
+  select * into k from public.api_keys ak where ak.key_hash = p_hash;
   if k.id is null then return; end if;
   if k.revoked_at is not null then return; end if;
   if k.expires_at is not null and k.expires_at < now() then return; end if;
   insert into public.api_rate_buckets(key_id, minute, hits) values (k.id, m, 1)
     on conflict (key_id, minute) do update set hits = api_rate_buckets.hits + 1
-    returning hits into h;
-  update public.api_keys set last_used_at = now() where id = k.id;
+    returning api_rate_buckets.hits into h;
+  update public.api_keys ak set last_used_at = now() where ak.id = k.id;
   select o.plan into p from public.orgs o where o.id = k.org_id;
   return query select k.id, k.org_id, k.scopes, p, (h > k.rate_limit_per_min), greatest(k.rate_limit_per_min - h, 0);
 end $fn$;

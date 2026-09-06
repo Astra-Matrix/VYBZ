@@ -601,7 +601,8 @@ async function uploadBlob(ctx: Ctx, id: string) {
   const org = ctx.principal.orgId;
   const { data: existing } = await admin.from("vault_blobs").select("hash,size").eq("org_id", org).eq("hash", hash).maybeSingle();
   if (existing) return json({ object: "vault.blob", repo_id: r.id, hash, size: Number(existing.size), existed: true }, 200, ctx.headers);
-  const mime = (ctx.req.headers.get("x-vybz-mime") ?? ctx.req.headers.get("content-type") ?? "application/octet-stream").split(";")[0];
+  const declaredMime = (ctx.req.headers.get("x-vybz-mime") ?? ctx.req.headers.get("content-type") ?? "").split(";")[0].trim();
+  const mime = !declaredMime || /form-urlencoded|multipart/i.test(declaredMime) ? "application/octet-stream" : declaredMime;
   const path = `${org}/${hash.slice(0, 2)}/${hash}`;
   const up = await admin.storage.from(BLOBS).upload(path, bytes, { contentType: mime, upsert: true });
   if (up.error) throw new ApiError(500, "storage_error", "The blob could not be stored.");
