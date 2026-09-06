@@ -3,7 +3,7 @@
  * tables; the plaintext API key exists in the browser only for the moment it
  * is shown after creation.
  */
-import { supabase } from "@/lib/supabase";
+import { supabase, SUPABASE_URL } from "@/lib/supabase";
 
 export type Org = { id: string; name: string; slug: string; plan: "developer" | "business" | "enterprise"; created_at: string };
 export type ApiKeyRow = {
@@ -45,6 +45,29 @@ export const SCOPES: Array<{ id: string; label: string; hint: string }> = [
 function client() {
   if (!supabase) throw new Error("Backend not configured.");
   return supabase;
+}
+
+/** Public API base for console calls. Direct to the edge function so large bodies bypass the site proxy. */
+export const API_BASE = `${SUPABASE_URL}/functions/v1/api-v1/v1`;
+
+/**
+ * Call the public API as the signed-in member. The gateway accepts a session
+ * JWT plus `X-VYBZ-Org` for organization members, so the console reaches every
+ * capability without minting a key.
+ */
+export async function apiRequest<T>(orgId: string, method: string, path: string, body?: BodyInit, headers: Record<string, string> = {}): Promise<T> {
+  const { data } = await client().auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error("Not signed in.");
+  const res = await fetch(`${API_BASE}${path}`, { method, headers: { Authorization: `Bearer ${token}`, "X-VYBZ-Org": orgId, ...headers }, body });
+  const text = await res.text();
+  let json: unknown = null;
+  try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
+  if (!res.ok) {
+    const err = (json as { error?: { message?: string; code?: string } } | null)?.error;
+    throw new Error(err?.message ?? `${res.status} ${res.statusText}`);
+  }
+  return json as T;
 }
 
 export async function listOrgs(): Promise<Org[]> {
