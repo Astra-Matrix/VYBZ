@@ -10,9 +10,11 @@
 //   • account.updated             → sync creator_payouts readiness flags
 //
 // Deploy with --no-verify-jwt (Stripe calls this without a Supabase JWT; we
-// verify the Stripe-Signature instead).
+// verify the Stripe-Signature instead). The signing secret comes from Vault
+// (STRIPE_WEBHOOK_SECRET) with an environment fallback.
 import { admin } from "../_shared/edge.ts";
 import { stripe, cryptoProvider } from "../_shared/stripe.ts";
+import { secret } from "../_shared/secrets.ts";
 
 const ZIP_BUCKET = "storefront-zips";
 const SIGN_TTL_SEC = 24 * 60 * 60;
@@ -174,13 +176,13 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return new Response("method", { status: 405 });
 
   const sig = req.headers.get("stripe-signature");
-  const secret = Deno.env.get("STRIPE_WEBHOOK_SECRET") ?? "";
+  const whsec = await secret("STRIPE_WEBHOOK_SECRET");
   const raw = await req.text();
-  if (!sig || !secret) return new Response("not configured", { status: 400 });
+  if (!sig || !whsec) return new Response("not configured", { status: 400 });
 
   let event;
   try {
-    event = await stripe.webhooks.constructEventAsync(raw, sig, secret, undefined, cryptoProvider);
+    event = await stripe.webhooks.constructEventAsync(raw, sig, whsec, undefined, cryptoProvider);
   } catch (e) {
     return new Response(`bad signature: ${(e as Error).message}`, { status: 400 });
   }

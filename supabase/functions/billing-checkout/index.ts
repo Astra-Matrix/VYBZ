@@ -6,13 +6,13 @@
 //   POST { action: "status",   orgId }          → { plan, billing, usage }
 //
 // Caller must be an org admin (Supabase JWT, self-verified). Deploy with
-// --no-verify-jwt. Secrets: STRIPE_SECRET_KEY, optional STRIPE_PRICE_BUSINESS
-// (a recurring price id). Without it, Checkout uses inline recurring price_data
-// at $249/month so the flow works before a product is configured.
+// --no-verify-jwt. Secrets: STRIPE_SECRET_KEY (env), STRIPE_PRICE_BUSINESS
+// (Vault, env fallback). Without a price id, Checkout uses inline recurring
+// price_data at $249/month.
 import { admin, CORS, json, callerId } from "../_shared/edge.ts";
 import { stripe } from "../_shared/stripe.ts";
+import { secret } from "../_shared/secrets.ts";
 
-const PRICE_BUSINESS = Deno.env.get("STRIPE_PRICE_BUSINESS") ?? "";
 const BUSINESS_CENTS = 24900;
 
 async function isAdmin(orgId: string, uid: string): Promise<boolean> {
@@ -48,6 +48,7 @@ Deno.serve(async (req: Request) => {
   const origin = typeof body.origin === "string" && body.origin.startsWith("http")
     ? body.origin
     : (Deno.env.get("APP_URL") ?? "https://vybz.cloud");
+  const PRICE_BUSINESS = await secret("STRIPE_PRICE_BUSINESS");
 
   try {
     if (action === "status") {

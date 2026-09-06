@@ -10,11 +10,12 @@
 //   POST .../billing-usage-report?period=2026-08-01
 //   POST .../billing-usage-report?dry_run=1  → compute only, no Stripe writes
 //
-// Auth: header x-cron-secret == BILLING_CRON_SECRET (or DIGEST_CRON_SECRET), or
-// a service-role Bearer. Deploy with --no-verify-jwt. Schedule: 1st of each
-// month, 06:00 UTC.
+// Auth: header x-cron-secret == BILLING_CRON_SECRET (Vault, env fallback; or
+// DIGEST_CRON_SECRET), or a service-role Bearer. Deploy with --no-verify-jwt.
+// Scheduled by pg_cron (migration 0119) on the 1st of each month, 06:00 UTC.
 import { admin, json } from "../_shared/edge.ts";
 import { stripe } from "../_shared/stripe.ts";
+import { secret } from "../_shared/secrets.ts";
 
 const RATES = {
   issuance_cents: 2,      // $0.02 per issuance over the included amount
@@ -22,10 +23,14 @@ const RATES = {
   storage_gb_cents: 1.5,  // $0.015 per GB-month
 };
 
-function authorized(req: Request): boolean {
-  const secret = Deno.env.get("BILLING_CRON_SECRET") ?? Deno.env.get("DIGEST_CRON_SECRET") ?? "";
+async function authorized(req: Request): Promise<boolean> {
   const hdr = req.headers.get("x-cron-secret") ?? "";
-  if (secret && hdr && hdr === secret) return true;
+  if (hdr) {
+    const s = await secret("BILLING_CRON_SECRET");
+    if (s && hdr === s) return true;
+    const d = Deno.env.get("DIGEST_CRON_SECRET") ?? "";
+    if (d && hdr === d) return true;
+  }
   const bearer = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
   const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   return Boolean(service) && bearer === service;
@@ -39,7 +44,7 @@ function previousMonth(): string {
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "method" }, 405);
-  if (!authorized(req)) return json({ error: "unauthorized" }, 401);
+  if (!(await authorized(req))) return json({ error: "unauthorized" }, 401);
   const url = new URL(req.url);
   const period = /^\d{4}-\d{2}-01$/.test(url.searchParams.get("period") ?? "") ? url.searchParams.get("period")! : previousMonth();
   const dryRun = url.searchParams.get("dry_run") === "1";

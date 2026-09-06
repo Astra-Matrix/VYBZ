@@ -38,7 +38,7 @@ Humans use the **Console** (`/console`). Machines and AI agents use the **API** 
 ## Working rules
 
 - `npm run validate` must pass before a commit: typecheck, tests, build.
-- Secrets never appear in `VITE_*`. `WM_SECRET`, `C2PA_WORKER_URL`, `C2PA_WORKER_TOKEN`, `API_PUBLIC_BASE`, `STRIPE_*`, `BILLING_CRON_SECRET` are Supabase Edge secrets.
+- Secrets never appear in `VITE_*`. `WM_SECRET`, `C2PA_*`, `API_PUBLIC_BASE`, `STRIPE_SECRET_KEY` are Supabase Edge environment secrets. `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_BUSINESS`, `BILLING_CRON_SECRET` live in Supabase Vault and are read through `platform_secret()` (see `_shared/secrets.ts`); rotate them in SQL, never by redeploying.
 - Deploying: the Supabase CLI is not authenticated on the dev machine; edge functions are deployed through the Supabase connector with inline sources, migrations through `apply_migration`, followed by `notify pgrst, 'reload schema'`. Service-role RPCs need an explicit grant after revoking from public.
 - API changes update three things together: `api-v1/index.ts`, `_shared/openapi.ts`, `docs/API.md`. MCP tool changes update `packages/mcp-server/src/tools.ts` and `docs/AGENTS.md`.
 - Migrations are additive and paired with a `.down.sql`.
