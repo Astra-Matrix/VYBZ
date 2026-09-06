@@ -14,8 +14,11 @@
 # 1. Database
 supabase db push                       # applies supabase/migrations/*
 
-# 2. Edge functions
-supabase functions deploy api-v1 --no-verify-jwt --project-ref xixmneooyufbeftdfpcm
+# 2. Edge functions (api-v1 ships as one esbuild bundle plus its import map;
+#    the same bundle is what the Supabase connector deploys when the CLI is unavailable)
+npx esbuild supabase/functions/api-v1/index.ts --bundle --minify --format=esm --platform=neutral --target=esnext   --external:mpg123-decoder --external:@wasm-audio-decoders/flac --external:@wasm-audio-decoders/ogg-vorbis   --external:ogg-opus-decoder --external:https://esm.sh/* --outfile=/tmp/api-v1/index.js
+cp supabase/functions/api-v1/deno.json /tmp/api-v1/deno.json
+supabase functions deploy api-v1 --no-verify-jwt --project-ref xixmneooyufbeftdfpcm --import-map /tmp/api-v1/deno.json
 supabase functions deploy billing-checkout --no-verify-jwt --project-ref xixmneooyufbeftdfpcm
 supabase functions deploy stripe-webhook --no-verify-jwt --project-ref xixmneooyufbeftdfpcm
 supabase functions deploy billing-usage-report --no-verify-jwt --project-ref xixmneooyufbeftdfpcm
@@ -26,6 +29,8 @@ supabase secrets set WM_SECRET="$(openssl rand -hex 32)" \
   --project-ref xixmneooyufbeftdfpcm
 # Optional Content Credentials:
 supabase secrets set C2PA_WORKER_URL="https://c2pa.example" C2PA_WORKER_TOKEN="…" --project-ref xixmneooyufbeftdfpcm
+# Optional AAC/MP4 input:
+supabase secrets set DECODE_WORKER_URL="https://decode.example" DECODE_WORKER_TOKEN="…" --project-ref xixmneooyufbeftdfpcm
 
 # 4. Site + hosted MCP (Vercel, from main)
 npm run validate && git push
@@ -46,34 +51,37 @@ select vault.update_secret(id, '<new value>') from vault.secrets where name = 'S
 | `WM_SECRET` | Supabase Edge | HMAC root for watermark keys. Rotating it breaks detection of copies issued before rotation. Never rotate casually; if you must, keep the old value and add versioning first. |
 | `API_PUBLIC_BASE` | Supabase Edge | Base URL in response `links`. |
 | `C2PA_WORKER_URL`, `C2PA_WORKER_TOKEN` | Supabase Edge | Content Credentials signer. |
-| `STRIPE_SECRET_KEY` | Supabase Edge (env) | Account secret key. Currently the **Astra Matrix sandbox** test key. Going live means replacing it with the live key of the same Stripe account and re-creating the webhook endpoint and price in live mode. |
-| `STRIPE_WEBHOOK_SECRET` | Vault | Signing secret of the sandbox endpoint `we_1UCZafAfH0i9CqRvtEUTDMyE`, subscribed to `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `account.updated`. |
-| `STRIPE_PRICE_BUSINESS` | Vault | Recurring price for the Business plan (`price_1UCZbEAfH0i9CqRvGOkWYCGi`, product `prod_VCzamvFsytuSwW`, sandbox). |
+| `DECODE_WORKER_URL`, `DECODE_WORKER_TOKEN` | Supabase Edge | ffmpeg decode worker for AAC/M4A, ALAC, MP4, MOV, WebM, WMA input. Without it those formats answer `422 unsupported_audio`; WAV, AIFF, FLAC, MP3, Ogg, Opus decode in the edge regardless. |
+| `STRIPE_SECRET_KEY` | Supabase Edge (env) | Secret key of the Stripe account in use. Live: the **VYBZ** account (`acct_1TwTEtAnnpt9OYZI`). Sandbox: Astra Matrix sandbox (`acct_1UBzybAfH0i9CqRv`). |
+| `STRIPE_WEBHOOK_SECRET` | Vault | Signing secret of the webhook endpoint at `https://xixmneooyufbeftdfpcm.supabase.co/functions/v1/stripe-webhook`, subscribed to `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `account.updated`. Sandbox endpoint: `we_1UCZafAfH0i9CqRvtEUTDMyE`. |
+| `STRIPE_PRICE_BUSINESS` | Vault | Recurring $249/month price for the Business plan. Live (VYBZ): `price_1UChynAnnpt9OYZI6sxnvJ4p`, product `prod_VD8CIWhlFEW3ug`. Sandbox: `price_1UCZbEAfH0i9CqRvGOkWYCGi`, product `prod_VCzamvFsytuSwW`. |
 | `BILLING_CRON_SECRET` | Vault | Header `x-cron-secret` for `billing-usage-report`; `run_billing_usage_report()` reads it for the pg_cron job. |
 | `VYBZ_API_BASE` | Vercel | Hosted MCP → API base (default vybz.cloud/v1). |
 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | Vercel | Console client. |
 
 Nothing secret is ever prefixed `VITE_`.
 
+## Decode worker
+
+`worker/decode` is a Node service that runs ffmpeg. `docker compose up -d --build` with `WORKER_TOKEN` set, then point `DECODE_WORKER_URL` and `DECODE_WORKER_TOKEN` at it. It accepts up to 200 MB per request, caps decoded duration with `X-VYBZ-Max-Seconds`, and answers 32-bit float WAV. Health at `/healthz`. It never stores input; files are written to a temp directory for ffmpeg to seek and deleted after each request.
+
 ## C2PA worker
 
 Container on any glibc 2.39+ host (Ubuntu 24.04 image). `docker compose up -d --build` in `worker/c2pa` with `WORKER_TOKEN` set. A self-signed ES256 certificate is generated on first boot; production installs a CA-issued certificate into the `c2pa-certs` volume.
 
-## Going live with Stripe
+## Stripe modes
 
-Everything is wired against the Stripe **sandbox** today, so upgrades can be exercised with test cards (4242 4242 4242 4242). To take real money:
+Live objects exist in the VYBZ account (product and price above). Switching between sandbox and live is one dashboard action plus one SQL statement, no redeploy:
 
-1. In the live Stripe account, create the Business product and a $249/month recurring price. Note the price id.
-2. Create a webhook endpoint for `https://xixmneooyufbeftdfpcm.supabase.co/functions/v1/stripe-webhook` with the four events above. Note the signing secret.
-3. In Supabase → Edge Functions → Secrets, replace `STRIPE_SECRET_KEY` with the live key.
-4. In SQL, rotate the two Vault values:
+1. Supabase → Edge Functions → Secrets: set `STRIPE_SECRET_KEY` to the key of the target account.
+2. Rotate the two Vault values to the matching endpoint signing secret and price id from the table above:
 
 ```sql
-select vault.update_secret(id, 'whsec_…') from vault.secrets where name = 'STRIPE_WEBHOOK_SECRET';
-select vault.update_secret(id, 'price_…') from vault.secrets where name = 'STRIPE_PRICE_BUSINESS';
+select vault.update_secret(id, '<signing secret of the endpoint>') from vault.secrets where name = 'STRIPE_WEBHOOK_SECRET';
+select vault.update_secret(id, '<price id>') from vault.secrets where name = 'STRIPE_PRICE_BUSINESS';
 ```
 
-No redeploy is needed.
+While the key and the Vault values disagree, checkout fails and webhook signatures are rejected. Only one enabled endpoint per account should point at the edge function, otherwise every event is delivered twice and one copy fails signature verification. Sandbox mode accepts test cards (4242 4242 4242 4242); live mode takes real money.
 
 ## Runbooks
 
@@ -87,7 +95,11 @@ No redeploy is needed.
 
 **Rate bucket growth.** `select public.api_rate_buckets_prune();` on a daily schedule (Supabase cron).
 
-**Large detection latency.** Detection is O(issuances × samples). If an asset exceeds ~5,000 issuances, advise the customer to register per-campaign variants.
+**Large detection latency.** Decoding dominates for long files; correlation is one 8192-point FFT per issuance. If an asset exceeds ~5,000 issuances, advise the customer to register per-campaign variants.
+
+**Fingerprint index growth.** `select count(*) from provenance_fingerprint_index;` grows by about 21 rows per second of registered audio, capped at ten minutes per asset. Rebuild an asset's entry by re-registering is not possible; use `provenance_fingerprint_store` from SQL with a fresh fingerprint if an index is ever lost.
+
+**Edge function dependencies.** `api-v1` imports WASM decoders through `supabase/functions/api-v1/deno.json`. Deploy with that file alongside `index.ts` and the `_shared` modules.
 
 **Storage growth.** Unique bytes per org: `select org_id, sum(size) from vault_blobs group by 1;` plus `provenance_assets.bytes`.
 
@@ -109,4 +121,4 @@ npm run mcp:dev                   # local MCP against VYBZ_API_BASE
 
 `npm run validate` = typecheck + unit tests + production build. CI runs it on every push. Do not merge red.
 
-Last updated: 2026-09-05
+Last updated: 2026-09-07

@@ -5,7 +5,8 @@ Ordered by revenue impact. Dates are targets, not promises.
 ## Now (Q4 2026)
 
 - **Billing.** Shipped 2026-09-06: Business subscription, developer caps, members, invites, and monthly overage invoice items. Remaining: an in-console usage report history.
-- **Compressed input.** Server-side decode of MP3, AAC, FLAC for `verify` and `detect` so customers do not pre-convert.
+- **Compressed input.** Shipped 2026-09-07: WAV, AIFF, FLAC, MP3, Ogg Vorbis, and Opus decode in the edge; AAC/M4A, ALAC, MP4, MOV, WebM through the decode worker. Suspects are resampled to the asset's rate. Remaining: host the decode worker.
+- **Verification evidence.** Shipped 2026-09-07: exact hash, PCM hash, perceptual fingerprint with offset, Content Credentials check, and opt-in watermark attribution, in one call. Batches of 25 files or URLs. Console Verify page.
 - **Chunked blob upload.** Resumable uploads for files above 500 MB.
 - **Webhooks.** `issuance.created`, `detection.attributed`, `commit.created` with signed payloads.
 
@@ -30,4 +31,4 @@ Ordered by revenue impact. Dates are targets, not promises.
 - A marketplace.
 - DRM. Provenance is attribution; it does not stop playback or copying.
 
-Last updated: 2026-09-05
+Last updated: 2026-09-07

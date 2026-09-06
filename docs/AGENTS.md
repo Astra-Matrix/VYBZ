@@ -49,12 +49,13 @@ Give it `https://vybz.cloud/v1/openapi.json` and `https://vybz.cloud/llms.txt`. 
 | Tool | Scope | Purpose |
 |---|---|---|
 | `vybz_whoami` | `org:read` | Organization, plan, key, scopes. |
-| `provenance_register` | `provenance:write` | Register a WAV (`file` / `url` / `base64`, `title`, `external_ref`). |
+| `provenance_register` | `provenance:write` | Register a lossless original, WAV, AIFF, or FLAC (`file` / `url` / `base64`, `title`, `external_ref`). |
 | `provenance_list_assets`, `provenance_get_asset` | `provenance:read` | Browse assets. |
 | `provenance_issue` | `provenance:write` | Issue a copy to `recipient`. Returns a link, or writes `output_file` locally. |
 | `provenance_list_issuances`, `provenance_ledger` | `provenance:read` | Who received what; chained history. |
-| `provenance_verify` | `provenance:read` | Exact-hash check of any file. |
-| `provenance_detect` | `provenance:detect` | Attribute a suspect file to a recipient. |
+| `provenance_verify` | `provenance:read` | What is this file? Exact hash, PCM hash, fingerprint (identifies the original, no id needed), Content Credentials, and with `attribute: true` the watermark. Any format. `files` / `urls` for batches of 25. |
+| `provenance_detect` | `provenance:detect` | Attribute suspect files to a recipient of a known asset. Any format, resampled automatically. `files` / `urls` for batches. |
+| `provenance_formats` | any | Formats this deployment decodes, and limits. |
 | `provenance_chain_verify` | `provenance:read` | Recompute the organization chain. |
 | `vault_create_repo`, `vault_list_repos`, `vault_get_repo` | `vault:*` | Repositories. |
 | `vault_history`, `vault_tree`, `vault_diff`, `vault_branches`, `vault_create_branch` | `vault:read` / `vault:write` | Read and shape the graph. |
@@ -70,8 +71,9 @@ Each tool returns compact JSON. Errors return `{ error, message, status, request
 
 - "Snapshot `D:/Projects/Midnight Drive Project` into repo `midnight-drive` with message 'end of day'."
 - "Issue a watermarked preview of asset `…` to each address in this list and give me the issuance ids."
-- "Here is a file from a takedown notice: `https://…/leak.wav`. Which recipient of asset `…` did it come from?"
-- "Verify `https://…/delivery.wav` is one of our issued copies before I approve the invoice."
+- "Here is a file from a takedown notice: `https://…/leak.mp3`. Where does it come from and who leaked it?" (verify with `attribute: true`)
+- "Verify `https://…/delivery.flac` is one of our issued copies before I approve the invoice."
+- "Check every file in `D:/Takedowns/2026-09` and list the ones attributed to a recipient."
 - "Show what changed in `midnight-drive` between yesterday's commit and now."
 
 ## Safety model
@@ -93,4 +95,4 @@ const asset = await vybz.registerAsset(wavBytes, { title: "Master" });
 const link = await vybz.issueLink(asset.id as string, { recipient: "partner@example.com" });
 ```
 
-Last updated: 2026-09-05
+Last updated: 2026-09-07

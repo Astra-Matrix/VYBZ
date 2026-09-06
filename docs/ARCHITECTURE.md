@@ -46,7 +46,13 @@ Definer RPCs used by the gateway (service role only): `api_key_authenticate`, `a
 
 ## Provenance DSP
 
-`supabase/functions/_shared/watermark.mjs` is a dependency-free module that runs in Deno and Node: WAV parse/encode, HMAC key derivation, DSSS embed, FFT-based blind detection. See [Provenance](./PROVENANCE.md).
+Three shared modules run unchanged in Deno and Node and are tested in Node against real encoder output (`_shared/audio.test.ts`, fixtures made with ffmpeg):
+
+- `_shared/watermark.mjs`: WAV parse/encode, HMAC key derivation, DSSS embed, and blind detection split into a key-independent fold plus per-key FFT correlation.
+- `_shared/decode.mjs`: byte-level format sniffing, WAV/AIFF parsers, WASM decoders for FLAC, MP3, Vorbis, and Opus (chunked so a frame cap stops early), a windowed-sinc resampler, the canonical PCM hash, and the call-out to the ffmpeg decode worker.
+- `_shared/fingerprint.mjs`: the perceptual fingerprint and its bit-error-rate matcher. The inverted index lives in `provenance_fingerprint_index` with vote and store RPCs.
+
+See [Provenance](./PROVENANCE.md).
 
 ## Vault graph
 
@@ -56,10 +62,18 @@ Commits store their complete tree inline as JSON (path, hash, size). This keeps 
 
 `src/site` and `src/console` are the whole front end: their own stylesheet (`site.css`), a thin session provider over Supabase Auth, and the Supabase client. `App.tsx` renders `SiteApp`; unknown paths redirect to `/`.
 
-Docs are Markdown in `docs/` imported at build time and rendered with `marked`; the same files are the repository documentation.
+Docs are Markdown in `docs/` imported at build time and rendered with `marked`; the same files are the repository documentation. `src/site/docsIndex.ts` is the single list of public documents.
+
+## Rendering and search
+
+The site is a single-page application that ships prerendered. `npm run build` runs `vite build` and then `scripts/prerender.mjs`, which builds `src/entry-server.tsx` for Node, renders every indexable route with `renderToString`, and writes `dist/<route>/index.html` with route-specific head tags. `main.tsx` hydrates when the root already has markup and mounts fresh otherwise. Routes that are not prerendered (console, sign in, unknown paths) are served `app.html`, a clean shell, through the Vercel rewrite.
+
+`src/site/seo.ts` is the single source of page metadata: title, description, canonical URL, robots directive, and JSON-LD for each route. The prerenderer reads it at build time, `SiteShell` applies it on every client navigation, and `seo.test.ts` enforces length limits and coverage of every doc and legal page. The same script writes `sitemap.xml` from the indexable routes with `lastmod` taken from each document's `Last updated` line, and `llms-full.txt` from the public documentation. `public/robots.txt` allows everything except the console, sign in, and `/api/`.
+
+Adding a page: add the route in `SiteApp.tsx` and its entry in `seo.ts`. The tests fail if a doc has no metadata.
 
 ## Legacy
 
 The creator application was removed from the repository on 2026-09-06. Its database tables and deployed edge functions still exist in the Supabase project and are inert; retire them from the dashboard when convenient. Two pieces were kept for extraction: the VST3 capture node (`native/vlink`) as a Vault capture source, and the folder watcher (`tools/vybz-bridge`) as a local auto-snapshot daemon.
 
-Last updated: 2026-09-05
+Last updated: 2026-09-07

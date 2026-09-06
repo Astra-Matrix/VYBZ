@@ -45,12 +45,20 @@ The headers carry `X-VYBZ-Issuance-Id`, `X-VYBZ-Watermark-Id`, and `X-VYBZ-C2PA`
 
 ## 5. Attribute a leak
 
-Take any copy that escaped, decode it to WAV if needed, and ask:
+Take any copy that escaped, in whatever format it turned up, and ask. If you do not know which asset it came from, verify identifies it and attributes in one call:
+
+```bash
+curl -X POST "$BASE/provenance/verify?attribute=true" \
+  -H "Authorization: Bearer $VYBZ_API_KEY" \
+  --data-binary @found-on-the-internet.mp3
+```
+
+When you already know the asset:
 
 ```bash
 curl -X POST $BASE/provenance/assets/$ASSET/detect \
   -H "Authorization: Bearer $VYBZ_API_KEY" \
-  --data-binary @found-on-the-internet.wav
+  --data-binary @found-on-the-internet.mp3
 ```
 
 ```json
@@ -75,4 +83,4 @@ The agent calls `vault_create_repo` then `vault_commit_folder`. Only bytes the o
 
 Next: [API reference](./API.md) · [Provenance internals](./PROVENANCE.md) · [Vault workflow](./VAULT.md)
 
-Last updated: 2026-09-05
+Last updated: 2026-09-07
