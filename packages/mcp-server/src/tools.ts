@@ -10,7 +10,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { readFile, readdir, stat, mkdir, writeFile } from "node:fs/promises";
 import { join, relative, dirname, resolve, sep } from "node:path";
-import { sha256, VybzApiError, type VybzClient } from "./client.js";
+import { sha256, VybzApiError, type NamedFile, type VybzClient } from "./client.js";
+import { basename } from "node:path";
 
 export interface ToolOptions {
   /** Allow tools that read and write the local filesystem. */
@@ -104,12 +105,12 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
     {
       title: "Register an original",
       description:
-        "Register a PCM WAV as a provenance asset. Returns the asset id and SHA-256. Idempotent for identical bytes. " +
+        "Register a lossless original (WAV, AIFF, or FLAC) as a provenance asset. It is hashed, PCM-hashed, and fingerprinted. Returns the asset id and SHA-256. Idempotent for identical bytes. " +
         (fs ? "Provide `file` (local path), `url`, or `base64`." : "Provide `url` or `base64`."),
       inputSchema: {
-        file: z.string().optional().describe(fs ? "Local path to a .wav" : "Unavailable in hosted mode"),
-        url: z.string().url().optional().describe("HTTPS URL of a .wav"),
-        base64: z.string().optional().describe("Base64 WAV bytes (small files only)"),
+        file: z.string().optional().describe(fs ? "Local path to a .wav, .aiff, or .flac" : "Unavailable in hosted mode"),
+        url: z.string().url().optional().describe("HTTPS URL of a lossless file"),
+        base64: z.string().optional().describe("Base64 file bytes (small files only)"),
         title: z.string().max(200).optional(),
         external_ref: z.string().max(200).optional().describe("Your own id for this recording"),
       },
@@ -173,17 +174,50 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
     async (a) => run(() => client.ledger(a.asset_id)),
   );
 
+  const FORMATS = "Any format: WAV, AIFF, FLAC, MP3, Ogg Vorbis, Opus, and (when the deployment has a decode worker) AAC/M4A, ALAC, MP4, MOV, WebM.";
+  const inputSchema = {
+    file: z.string().optional().describe(fs ? "Local file path" : "Not available on the hosted server"),
+    files: z.array(z.string()).max(25).optional().describe(fs ? "Local file paths for a batch (up to 25)" : "Not available on the hosted server"),
+    url: z.string().url().optional().describe("Public URL to fetch"),
+    urls: z.array(z.string().url()).max(25).optional().describe("Public URLs to fetch as a batch (up to 25)"),
+    base64: z.string().optional().describe("Raw file bytes, base64"),
+  };
+
+  /** Resolve every way a tool can receive files into named byte arrays, or a URL list. */
+  async function gather(a: { file?: string; files?: string[]; url?: string; urls?: string[]; base64?: string }): Promise<{ files: NamedFile[]; urls: { url: string; name: string }[] }> {
+    const files: NamedFile[] = [];
+    const urls: { url: string; name: string }[] = [];
+    if (fs && a.file) files.push({ name: basename(a.file), bytes: new Uint8Array(await readFile(guard(opts.roots, a.file))) });
+    if (fs && a.files?.length) for (const f of a.files) files.push({ name: basename(f), bytes: new Uint8Array(await readFile(guard(opts.roots, f))) });
+    if (!fs && (a.file || a.files?.length)) throw new Error("The hosted server has no filesystem. Pass `url`, `urls`, or `base64`.");
+    if (a.base64) files.push({ name: "base64", bytes: Buffer.from(a.base64, "base64") });
+    if (a.url) urls.push({ url: a.url, name: a.url });
+    if (a.urls?.length) for (const u of a.urls) urls.push({ url: u, name: u });
+    if (!files.length && !urls.length) throw new Error("Provide `file`, `files`, `url`, `urls`, or `base64`.");
+    if (files.length && urls.length) throw new Error("Pass either local files or URLs in one call, not both.");
+    return { files, urls };
+  }
+
   server.registerTool(
     "provenance_verify",
     {
-      title: "Verify a file",
-      description: "Exact-hash verification: is this file a registered original or an issued copy, and for whom? " + (fs ? "Provide `file`, `url`, or `base64`." : "Provide `url` or `base64`."),
-      inputSchema: { file: z.string().optional(), url: z.string().url().optional(), base64: z.string().optional() },
+      title: "Verify files",
+      description:
+        "Establish what a file is, with evidence from every method: exact hash, canonical PCM hash (same audio in any lossless container), perceptual fingerprint (which original it derives from and at what offset, no asset id needed), Content Credentials, and optionally watermark attribution. " +
+        FORMATS + " Verification is free; `attribute: true` runs watermark attribution on the identified asset and is metered as one detection per file. Batches of up to 25 return one result per file.",
+      inputSchema: {
+        ...inputSchema,
+        attribute: z.boolean().optional().describe("Run watermark attribution when an original is identified (metered)."),
+        asset_id: z.string().uuid().optional().describe("Test the watermark against this asset when the file cannot be identified by fingerprint."),
+      },
     },
     async (a) =>
       run(async () => {
-        const bytes = fs && a.file ? new Uint8Array(await readFile(guard(opts.roots, a.file))) : await decodeInput(a);
-        return client.verify(bytes);
+        const { files, urls } = await gather(a);
+        const vo = { attribute: a.attribute, asset: a.asset_id };
+        if (urls.length) return client.verifyUrls(urls, vo);
+        if (files.length === 1) return client.verify(files[0].bytes, { ...vo, name: files[0].name });
+        return client.verifyBatch(files, vo);
       }),
   );
 
@@ -192,15 +226,23 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
     {
       title: "Attribute a leak",
       description:
-        "Blind watermark correlation of a suspect WAV against every copy issued for an asset. Returns ranked candidates and the attributed recipient when decisive. " +
-        (fs ? "Provide `file`, `url`, or `base64`." : "Provide `url` or `base64`."),
-      inputSchema: { asset_id: z.string().uuid(), file: z.string().optional(), url: z.string().url().optional(), base64: z.string().optional() },
+        "Blind watermark correlation of suspect audio against every copy issued for an asset. Returns ranked candidates and the attributed recipient when decisive. " +
+        FORMATS + " The suspect is decoded and resampled automatically. Metered as one detection per file; batches of up to 25 return one result per file. If you do not know the asset, call provenance_verify first: its fingerprint step identifies it.",
+      inputSchema: { asset_id: z.string().uuid(), ...inputSchema },
     },
     async (a) =>
       run(async () => {
-        const bytes = fs && a.file ? new Uint8Array(await readFile(guard(opts.roots, a.file))) : await decodeInput(a);
-        return client.detect(a.asset_id, bytes);
+        const { files, urls } = await gather(a);
+        if (urls.length) return client.detectUrls(a.asset_id, urls);
+        if (files.length === 1) return client.detect(a.asset_id, files[0].bytes, files[0].name);
+        return client.detectBatch(a.asset_id, files);
       }),
+  );
+
+  server.registerTool(
+    "provenance_formats",
+    { title: "Supported formats", description: "Which input formats this deployment decodes, which need the decode worker, and the size and batch limits." },
+    async () => run(() => client.formats()),
   );
 
   server.registerTool(

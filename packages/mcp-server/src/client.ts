@@ -28,6 +28,23 @@ export function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+export type NamedFile = { name: string; bytes: Uint8Array };
+export type VerifyOptions = { attribute?: boolean; asset?: string; name?: string };
+
+function verifyQuery(opts: VerifyOptions): string {
+  const q = new URLSearchParams();
+  if (opts.attribute) q.set("attribute", "true");
+  if (opts.asset) q.set("asset", opts.asset);
+  const s = q.toString();
+  return s ? `?${s}` : "";
+}
+
+function toForm(files: NamedFile[]): FormData {
+  const form = new FormData();
+  for (const f of files) form.append("files", new Blob([f.bytes as unknown as ArrayBuffer]), f.name);
+  return form;
+}
+
 export class VybzClient {
   private readonly key: string;
   readonly base: string;
@@ -42,7 +59,7 @@ export class VybzClient {
     this.ua = opts.userAgent ?? "vybz-mcp/1.0";
   }
 
-  private async call<T>(method: string, path: string, init: { json?: unknown; body?: Uint8Array; headers?: Record<string, string>; accept?: string } = {}): Promise<T> {
+  private async call<T>(method: string, path: string, init: { json?: unknown; body?: Uint8Array; form?: FormData; headers?: Record<string, string>; accept?: string } = {}): Promise<T> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.key}`,
       "User-Agent": this.ua,
@@ -53,6 +70,8 @@ export class VybzClient {
     if (init.json !== undefined) {
       headers["Content-Type"] = "application/json";
       body = JSON.stringify(init.json);
+    } else if (init.form) {
+      body = init.form; // fetch sets the multipart boundary
     } else if (init.body) {
       headers["Content-Type"] = headers["Content-Type"] ?? "application/octet-stream";
       body = init.body as unknown as BodyInit;
@@ -79,7 +98,7 @@ export class VybzClient {
 
   // Provenance
   registerAsset(wav: Uint8Array, opts: { title?: string; externalRef?: string } = {}) {
-    const headers: Record<string, string> = { "Content-Type": "audio/wav", "X-VYBZ-Content-SHA256": sha256(wav) };
+    const headers: Record<string, string> = { "Content-Type": "application/octet-stream", "X-VYBZ-Content-SHA256": sha256(wav) };
     if (opts.title) headers["X-VYBZ-Title"] = opts.title;
     if (opts.externalRef) headers["X-VYBZ-External-Ref"] = opts.externalRef;
     return this.call<Record<string, unknown>>("POST", "/provenance/assets", { body: wav, headers });
@@ -94,10 +113,26 @@ export class VybzClient {
   }
   listIssuances(id: string) { return this.call<{ data: Record<string, unknown>[] }>("GET", `/provenance/assets/${encodeURIComponent(id)}/issuances`); }
   ledger(id: string) { return this.call<{ data: Record<string, unknown>[] }>("GET", `/provenance/assets/${encodeURIComponent(id)}/ledger`); }
-  detect(id: string, wav: Uint8Array) {
-    return this.call<Record<string, unknown>>("POST", `/provenance/assets/${encodeURIComponent(id)}/detect`, { body: wav, headers: { "Content-Type": "audio/wav" } });
+  detect(id: string, bytes: Uint8Array, name = "suspect") {
+    return this.call<Record<string, unknown>>("POST", `/provenance/assets/${encodeURIComponent(id)}/detect`, { body: bytes, headers: { "X-VYBZ-Name": name } });
   }
-  verify(bytes: Uint8Array) { return this.call<Record<string, unknown>>("POST", "/provenance/verify", { body: bytes }); }
+  detectBatch(id: string, files: NamedFile[]) {
+    return this.call<{ data: Record<string, unknown>[]; summary: Record<string, number> }>("POST", `/provenance/assets/${encodeURIComponent(id)}/detect/batch`, { form: toForm(files) });
+  }
+  verify(bytes: Uint8Array, opts: VerifyOptions = {}) {
+    const q = verifyQuery(opts);
+    return this.call<Record<string, unknown>>("POST", `/provenance/verify${q}`, { body: bytes, headers: { "X-VYBZ-Name": opts.name ?? "file" } });
+  }
+  verifyBatch(files: NamedFile[], opts: VerifyOptions = {}) {
+    return this.call<{ data: Record<string, unknown>[]; summary: Record<string, number> }>("POST", `/provenance/verify/batch${verifyQuery(opts)}`, { form: toForm(files) });
+  }
+  verifyUrls(items: { url: string; name?: string }[], opts: VerifyOptions = {}) {
+    return this.call<{ data: Record<string, unknown>[]; summary: Record<string, number> }>("POST", `/provenance/verify/batch${verifyQuery(opts)}`, { json: { items } });
+  }
+  detectUrls(id: string, items: { url: string; name?: string }[]) {
+    return this.call<{ data: Record<string, unknown>[]; summary: Record<string, number> }>("POST", `/provenance/assets/${encodeURIComponent(id)}/detect/batch`, { json: { items } });
+  }
+  formats() { return this.call<Record<string, unknown>>("GET", "/provenance/formats"); }
   chain() { return this.call<Record<string, unknown>>("GET", "/provenance/chain"); }
 
   // Vault
