@@ -132,6 +132,7 @@ export function recordCall(input: {
   detail?: Record<string, unknown>;
 }): void {
   if (!input.principal) return;
+  // PostgREST builders are lazy: they only execute once awaited or `.then`-ed.
   const p = admin.rpc("api_record_call", {
     p_org: input.principal.orgId,
     p_key: input.principal.keyId,
@@ -145,11 +146,12 @@ export function recordCall(input: {
     p_request_id: input.requestId,
     p_product: input.product,
     p_detail: input.detail ?? {},
+  }).then(({ error }: { error: { message: string } | null }) => {
+    if (error) console.error("audit", input.requestId, error.message);
   });
   // deno-lint-ignore no-explicit-any
   const rt = (globalThis as any).EdgeRuntime;
   if (rt?.waitUntil) rt.waitUntil(p);
-  else void p;
 }
 
 export function isUuid(s: string): boolean {
