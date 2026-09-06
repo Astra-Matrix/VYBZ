@@ -35,7 +35,7 @@
       "destination": "/api/ai-review/manifest"
     },
     {
-      "source": "/((?!api/|v1/|v1$).*)",
+      "source": "/((?!api/|v1/|v1$|sw\\.js$|workbox-).*)",
       "destination": "/index.html"
     }
   ],
@@ -93,6 +93,28 @@
         {
           "key": "Access-Control-Allow-Origin",
           "value": "*"
+        }
+      ]
+    },
+    {
+      "source": "/sw.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "Service-Worker-Allowed",
+          "value": "/"
+        }
+      ]
+    },
+    {
+      "source": "/index.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
         }
       ]
     }

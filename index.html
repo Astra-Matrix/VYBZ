@@ -62,6 +62,19 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Remove any service worker and caches left by the previous application.
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          var had = regs.length > 0;
+          return Promise.all(regs.map(function (r) { return r.unregister(); })).then(function () {
+            if ("caches" in window) return caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); });
+          }).then(function () {
+            if (had && !sessionStorage.getItem("vz-sw-cleared")) { sessionStorage.setItem("vz-sw-cleared", "1"); location.reload(); }
+          });
+        }).catch(function () {});
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
