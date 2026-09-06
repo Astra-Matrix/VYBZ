@@ -18,6 +18,7 @@ Base URL `https://vybz.cloud/v1`. Machine-readable: [`/v1/openapi.json`](https:/
 | Status | Code | Meaning |
 |---|---|---|
 | 401 | `unauthenticated`, `invalid_key` | Missing, unknown, revoked, or expired key. |
+| 402 | `plan_limit_reached` | Developer plan cap hit (`plan`, `used`, `included`, `upgrade` in extra). Business and Enterprise are metered, never blocked. |
 | 403 | `insufficient_scope` | Key lacks the required scope (`required_scope` in extra). |
 | 404 | `not_found`, `route_not_found` | Object not in this organization, or no such route. |
 | 405 | `method_not_allowed` | |

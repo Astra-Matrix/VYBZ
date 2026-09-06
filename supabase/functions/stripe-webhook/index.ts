@@ -5,6 +5,8 @@
 //   • checkout.session.completed (kind=credit_topup) → fulfill_credit_topup
 //   • checkout.session.completed (kind=ai_topup) → fulfill_ai_topup (+6000 sec default)
 //   • checkout.session.completed (kind=storefront) → mark order paid + Resend ZIP link
+//   • checkout.session.completed (kind=org_plan) → link subscription, set org plan
+//   • customer.subscription.updated/deleted → keep org plan and status in sync
 //   • account.updated             → sync creator_payouts readiness flags
 //
 // Deploy with --no-verify-jwt (Stripe calls this without a Supabase JWT; we
@@ -145,6 +147,29 @@ async function fulfillStorefrontOrder(session: {
   }
 }
 
+/** Organization plan checkout completed: link the subscription and raise the plan. */
+async function applyOrgSubscription(
+  orgId: string | undefined,
+  subscription: string | { id?: string } | null | undefined,
+  customer: string | { id?: string } | null | undefined,
+  plan: string,
+): Promise<void> {
+  if (!orgId) { console.error("org_plan webhook missing org_id"); return; }
+  const subId = typeof subscription === "string" ? subscription : subscription?.id ?? null;
+  const custId = typeof customer === "string" ? customer : customer?.id ?? null;
+  let periodEnd: string | null = null;
+  let status = "active";
+  if (subId) {
+    try {
+      const sub = await stripe.subscriptions.retrieve(subId);
+      status = sub.status;
+      periodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null;
+    } catch (e) { console.error("subscription retrieve", (e as Error).message); }
+  }
+  const { error } = await admin.rpc("billing_apply", { p_org: orgId, p_customer: custId, p_subscription: subId, p_status: status, p_period_end: periodEnd, p_plan: plan });
+  if (error) console.error("billing_apply", error.message);
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return new Response("method", { status: 405 });
 
@@ -193,6 +218,26 @@ Deno.serve(async (req: Request) => {
         if (error) console.error("fulfill_ai_topup", error.message);
       } else if (s.metadata?.kind === "storefront") {
         await fulfillStorefrontOrder(s);
+      } else if (s.metadata?.kind === "org_plan") {
+        await applyOrgSubscription(s.metadata.org_id, (s as { subscription?: string | { id?: string } | null }).subscription, (s as { customer?: string | { id?: string } | null }).customer, s.metadata.plan ?? "business");
+      }
+    } else if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
+      const sub = event.data.object as { id: string; status: string; current_period_end?: number; customer?: string | { id?: string }; metadata?: Record<string, string> };
+      let orgId = sub.metadata?.org_id ?? null;
+      if (!orgId) {
+        const { data } = await admin.rpc("billing_org_for_subscription", { p_subscription: sub.id });
+        orgId = (data as string | null) ?? null;
+      }
+      if (orgId) {
+        const active = ["active", "trialing", "past_due"].includes(sub.status) && event.type !== "customer.subscription.deleted";
+        await admin.rpc("billing_apply", {
+          p_org: orgId,
+          p_customer: typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? null,
+          p_subscription: sub.id,
+          p_status: event.type === "customer.subscription.deleted" ? "canceled" : sub.status,
+          p_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+          p_plan: active ? (sub.metadata?.plan ?? "business") : "developer",
+        });
       }
     } else if (event.type === "account.updated") {
       const a = event.data.object as {

@@ -7,6 +7,7 @@
 - Only the SHA-256 of a key is stored. The plaintext is returned once at creation and never again.
 - Keys carry **scopes**, a **per-minute rate limit**, an optional **expiry**, and can be **revoked** instantly. A revoked key fails on the next request.
 - Key creation and revocation require the `owner` or `admin` role in the organization.
+- Team invites are single-use tokens (`vybz_inv_` + 48 hex), stored only as SHA-256, expiring in 14 days, revocable. The owner cannot be removed or demoted.
 
 ## Isolation
 

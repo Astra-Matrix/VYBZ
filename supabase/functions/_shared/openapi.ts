@@ -19,7 +19,7 @@ export function openapiDocument(base: string) {
         "Two products behind one key.\n\n" +
         "**Provenance** registers audio originals, issues per-recipient forensically watermarked copies (optionally with C2PA Content Credentials), verifies any file against the organization's record, and attributes leaked copies to the recipient who received them.\n\n" +
         "**Vault** is content-addressed version control for DAW projects and sample libraries: upload blobs by hash, commit trees, branch, diff, and restore.\n\n" +
-        "All calls are organization-scoped, audited, and rate limited per key.",
+        "All calls are organization-scoped, audited, and rate limited per key. Developer plans are hard-capped (402 plan_limit_reached); paid plans are metered.",
       contact: { name: "VYBZ", url: "https://vybz.cloud", email: "api@vybz.cloud" },
       termsOfService: "https://vybz.cloud/legal/terms",
     },
@@ -45,7 +45,7 @@ export function openapiDocument(base: string) {
             { name: "X-VYBZ-Content-SHA256", in: "header", schema: { type: "string" }, description: "Optional integrity check." },
           ],
           requestBody: wavBody("Raw WAV bytes (16/24/32-bit PCM or 32-bit float)."),
-          responses: { "201": jsonOf("Asset", "Registered"), "200": jsonOf("Asset", "Already registered"), "422": err("Not a PCM WAV"), "413": err("Too large") },
+          responses: { "201": jsonOf("Asset", "Registered"), "200": jsonOf("Asset", "Already registered"), "422": err("Not a PCM WAV"), "413": err("Too large"), "402": err("Plan limit reached") },
         },
         get: { tags: ["Provenance"], summary: "List assets", parameters: [{ name: "limit", in: "query", schema: { type: "integer", maximum: 200 } }], responses: { "200": jsonOf("AssetList") } },
       },
@@ -58,7 +58,7 @@ export function openapiDocument(base: string) {
           requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/IssueRequest" } } } },
           responses: {
             "201": { description: "Watermarked WAV bytes, or JSON with a download link.", headers: { "X-VYBZ-Issuance-Id": { schema: { type: "string" } }, "X-VYBZ-Watermark-Id": { schema: { type: "string" } }, "X-VYBZ-C2PA": { schema: { type: "string", enum: ["0", "1"] } }, "X-VYBZ-SHA256": { schema: { type: "string" } } }, content: { "audio/wav": { schema: { type: "string", format: "binary" } }, "application/json": { schema: { $ref: "#/components/schemas/IssuanceWithDownload" } } } },
-            "422": err("Missing recipient"),
+            "422": err("Missing recipient"), "402": err("Plan limit reached"),
           },
         },
       },
@@ -70,7 +70,7 @@ export function openapiDocument(base: string) {
           description: "Blind, alignment-tolerant correlation of the suspect audio against every copy issued for this asset. Returns ranked candidates and, when the evidence is decisive, the attributed issuance.",
           parameters: [idParam("id", "Asset id")],
           requestBody: wavBody("Suspect audio as PCM WAV. Decode compressed formats first."),
-          responses: { "200": jsonOf("Detection"), "422": err("Not a PCM WAV") },
+          responses: { "200": jsonOf("Detection"), "422": err("Not a PCM WAV"), "402": err("Plan limit reached") },
         },
       },
       "/provenance/verify": {
@@ -94,7 +94,7 @@ export function openapiDocument(base: string) {
           description: "Send raw bytes. The SHA-256 is computed server-side and the blob is deduplicated across the organization. Send `X-VYBZ-Content-SHA256` to have the upload rejected on mismatch.",
           parameters: [idParam("repo", "Repo id or slug"), { name: "X-VYBZ-Content-SHA256", in: "header", schema: { type: "string" } }, { name: "X-VYBZ-Mime", in: "header", schema: { type: "string" } }],
           requestBody: { required: true, content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } } },
-          responses: { "201": jsonOf("Blob"), "200": jsonOf("Blob", "Already stored") },
+          responses: { "201": jsonOf("Blob"), "200": jsonOf("Blob", "Already stored"), "402": err("Plan limit reached") },
         },
       },
       "/vault/repos/{repo}/blobs/exists": { post: { tags: ["Vault"], summary: "Check which hashes are missing", parameters: [idParam("repo", "Repo id or slug")], requestBody: { required: true, content: { "application/json": { schema: { type: "object", properties: { hashes: { type: "array", items: { type: "string" } } }, required: ["hashes"] } } } }, responses: { "200": { description: "{ present[], missing[] }" } } } },
@@ -129,7 +129,7 @@ export function openapiDocument(base: string) {
         Issuance: { type: "object", properties: { id: { type: "string" }, object: { const: "provenance.issuance" }, asset_id: { type: "string" }, recipient: { type: "string" }, license: { type: ["string", "null"] }, watermark_id: { type: "string" }, delivered_sha256: { type: "string" }, c2pa_signed: { type: "boolean" }, created_at: { type: "string" } } },
         IssuanceWithDownload: { allOf: [{ $ref: "#/components/schemas/Issuance" }, { type: "object", properties: { bytes: { type: "integer" }, download: { type: "object", properties: { url: { type: "string" }, expires_in: { type: "integer" } } } } }] },
         IssuanceList: { type: "object", properties: { object: { const: "list" }, data: { type: "array", items: { $ref: "#/components/schemas/Issuance" } } } },
-        Detection: { type: "object", properties: { object: { const: "provenance.detection" }, asset_id: { type: "string" }, suspect_sha256: { type: "string" }, confidence: { type: "string", enum: ["exact", "high", "medium", "none"] }, attributed: { type: ["object", "null"], properties: { issuance_id: { type: "string" }, recipient: { type: "string" }, watermark_id: { type: "string" }, score: { type: "number" }, exact: { type: "boolean" } } }, matches: { type: "array", items: { type: "object" } }, candidates: { type: "integer" } } },
+        Detection: { type: "object", properties: { object: { const: "provenance.detection" }, asset_id: { type: "string" }, suspect_sha256: { type: "string" }, confidence: { type: "string", enum: ["exact", "high", "medium", "none"] }, attributed: { type: ["object", "null"], properties: { issuance_id: { type: "string" }, recipient: { type: "string" }, watermark_id: { type: "string" }, score: { type: "number" }, exact: { type: "boolean" } } }, statistics: { type: "object", properties: { z: { type: ["number", "null"] }, ratio: { type: ["number", "null"] } } }, matches: { type: "array", items: { type: "object" } }, candidates: { type: "integer" } } },
         Verification: { type: "object", properties: { object: { const: "provenance.verification" }, sha256: { type: "string" }, known: { type: "boolean" }, kind: { type: "string", enum: ["original", "issued_copy", "unknown"] }, asset: { type: ["object", "null"] }, issuance: { type: ["object", "null"] }, hint: { type: ["string", "null"] } } },
         RepoCreate: { type: "object", properties: { name: { type: "string" }, slug: { type: "string" }, description: { type: "string" }, daw: { type: "string", description: "e.g. ableton, fl-studio, logic, pro-tools, cubase, reaper, bitwig" }, default_branch: { type: "string", default: "main" } }, required: ["name"] },
         Repo: { type: "object", properties: { id: { type: "string" }, object: { const: "vault.repo" }, name: { type: "string" }, slug: { type: "string" }, description: { type: ["string", "null"] }, daw: { type: ["string", "null"] }, default_branch: { type: "string" }, created_at: { type: "string" }, updated_at: { type: "string" }, links: { type: "object" } } },

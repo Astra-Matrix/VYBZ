@@ -1,6 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { KeyRound, Activity, ScrollText, Bot, LayoutDashboard, Plus, Copy, Check, ShieldCheck } from "lucide-react";
+import { KeyRound, Activity, ScrollText, Bot, LayoutDashboard, Plus, Copy, Check, ShieldCheck, Users, CreditCard } from "lucide-react";
+import { MembersPage, BillingPage, JoinPage } from "./TeamBilling";
 import { useSession } from "@/store/session";
 import { SiteShell, Code } from "@/site/SiteShell";
 import {
@@ -49,7 +50,14 @@ export function ConsolePage() {
   useEffect(() => { try { if (orgId) localStorage.setItem(ORG_STORAGE, orgId); } catch { /* ignore */ } }, [orgId]);
 
   if (!ready) return null;
-  if (!userId) return <Navigate to={`/signin?next=${encodeURIComponent(location.pathname)}`} replace />;
+  if (!userId) return <Navigate to={`/signin?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+  if (location.pathname === "/console/join") {
+    return (
+      <SiteShell>
+        <JoinPage onJoined={(o) => { setOrgs((cur) => [...(cur ?? []).filter((x) => x.id !== o.id), o]); setOrgId(o.id); }} />
+      </SiteShell>
+    );
+  }
 
   const org = orgs?.find((o) => o.id === orgId) ?? null;
 
@@ -77,6 +85,9 @@ export function ConsolePage() {
             <NavLink to="/console/usage" className={({ isActive }) => (isActive ? "active" : "")}><Activity size={15} /> Usage</NavLink>
             <NavLink to="/console/audit" className={({ isActive }) => (isActive ? "active" : "")}><ScrollText size={15} /> Audit log</NavLink>
             <NavLink to="/console/agents" className={({ isActive }) => (isActive ? "active" : "")}><Bot size={15} /> Agents</NavLink>
+            <div className="group">Organization</div>
+            <NavLink to="/console/members" className={({ isActive }) => (isActive ? "active" : "")}><Users size={15} /> Members</NavLink>
+            <NavLink to="/console/billing" className={({ isActive }) => (isActive ? "active" : "")}><CreditCard size={15} /> Billing</NavLink>
           </aside>
           <section>
             {org ? (
@@ -86,6 +97,8 @@ export function ConsolePage() {
                 <Route path="usage" element={<Usage org={org} />} />
                 <Route path="audit" element={<Audit org={org} />} />
                 <Route path="agents" element={<Agents org={org} />} />
+                <Route path="members" element={<MembersPage org={org} onChanged={() => void reload()} />} />
+                <Route path="billing" element={<BillingPage org={org} onChanged={() => void reload()} />} />
                 <Route path="*" element={<Navigate to="/console" replace />} />
               </Routes>
             ) : (

@@ -14,7 +14,9 @@ export function SignInPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  if (userId) return <Navigate to="/console" replace />;
+  const nextRaw = params.get("next") ?? "";
+  const next = nextRaw.startsWith("/") ? nextRaw : "/console";
+  if (userId) return <Navigate to={next} replace />;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -33,7 +35,7 @@ export function SignInPage() {
       setMode("signin");
       return;
     }
-    navigate("/console", { replace: true });
+    navigate(next, { replace: true });
   }
 
   return (

@@ -145,3 +145,62 @@ export function fmtDate(s: string | null): string {
   const d = new Date(s);
   return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
+
+// ── Team ────────────────────────────────────────────────────────────────────
+export type MemberRow = { user_id: string; email: string; role: "owner" | "admin" | "member"; created_at: string };
+export type InviteRow = { id: string; email: string; role: string; created_at: string; expires_at: string; accepted_at: string | null; revoked_at: string | null };
+
+export async function members(orgId: string): Promise<MemberRow[]> {
+  const { data, error } = await client().rpc("org_members_list", { p_org: orgId });
+  if (error) throw new Error(friendly(error.message));
+  return (data ?? []) as MemberRow[];
+}
+export async function invites(orgId: string): Promise<InviteRow[]> {
+  const { data, error } = await client().rpc("org_invites_list", { p_org: orgId });
+  if (error) throw new Error(friendly(error.message));
+  return (data ?? []) as InviteRow[];
+}
+export async function inviteCreate(orgId: string, email: string, role: "admin" | "member"): Promise<{ id: string; token: string; email: string }> {
+  const { data, error } = await client().rpc("org_invite_create", { p_org: orgId, p_email: email, p_role: role });
+  if (error) throw new Error(friendly(error.message));
+  const row = Array.isArray(data) ? data[0] : data;
+  return row as { id: string; token: string; email: string };
+}
+export async function inviteRevoke(id: string): Promise<void> {
+  const { error } = await client().rpc("org_invite_revoke", { p_id: id });
+  if (error) throw new Error(friendly(error.message));
+}
+export async function inviteAccept(token: string): Promise<Org> {
+  const { data, error } = await client().rpc("org_invite_accept", { p_token: token });
+  if (error) throw new Error(friendly(error.message));
+  return data as Org;
+}
+export async function memberSetRole(orgId: string, userId: string, role: "admin" | "member"): Promise<void> {
+  const { error } = await client().rpc("org_member_set_role", { p_org: orgId, p_user: userId, p_role: role });
+  if (error) throw new Error(friendly(error.message));
+}
+export async function memberRemove(orgId: string, userId: string): Promise<void> {
+  const { error } = await client().rpc("org_member_remove", { p_org: orgId, p_user: userId });
+  if (error) throw new Error(friendly(error.message));
+}
+
+// ── Billing ─────────────────────────────────────────────────────────────────
+export type PlanUsage = {
+  plan: string; issuances_month: number; detections_month: number; storage_bytes: number;
+  limit_issuances: number; limit_detections: number; limit_storage: number; hard_cap: boolean;
+};
+export type BillingStatus = {
+  plan: "developer" | "business" | "enterprise";
+  billing: { status: string; current_period_end?: string | null; stripe_subscription_id?: string | null };
+  usage: PlanUsage | null;
+  price_configured: boolean;
+};
+async function billingCall<T>(body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await client().functions.invoke("billing-checkout", { body: { ...body, origin: window.location.origin } });
+  if (error) throw new Error(error.message ?? "Billing is unavailable right now.");
+  if (data?.error) throw new Error(String(data.error));
+  return data as T;
+}
+export function billingStatus(orgId: string) { return billingCall<BillingStatus>({ action: "status", orgId }); }
+export function billingCheckout(orgId: string) { return billingCall<{ url: string }>({ action: "checkout", orgId }); }
+export function billingPortal(orgId: string) { return billingCall<{ url: string }>({ action: "portal", orgId }); }

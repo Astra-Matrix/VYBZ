@@ -4,8 +4,7 @@ Ordered by revenue impact. Dates are targets, not promises.
 
 ## Now (Q4 2026)
 
-- **Billing.** Stripe subscriptions for Business, metered issuances, detections, and unique stored bytes. Plan enforcement in `api_key_authenticate`.
-- **Team invites.** `org_members` management in the console with owner, admin, member roles.
+- **Metered overage billing.** Business subscription, developer caps, members, and invites shipped 2026-09-06. Remaining: report monthly overages to Stripe as usage records.
 - **Compressed input.** Server-side decode of MP3, AAC, FLAC for `verify` and `detect` so customers do not pre-convert.
 - **Chunked blob upload.** Resumable uploads for files above 500 MB.
 - **Webhooks.** `issuance.created`, `detection.attributed`, `commit.created` with signed payloads.

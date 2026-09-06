@@ -14,8 +14,10 @@
 # 1. Database
 supabase db push                       # applies supabase/migrations/*
 
-# 2. API gateway
+# 2. Edge functions
 supabase functions deploy api-v1 --no-verify-jwt --project-ref xixmneooyufbeftdfpcm
+supabase functions deploy billing-checkout --no-verify-jwt --project-ref xixmneooyufbeftdfpcm
+supabase functions deploy stripe-webhook --no-verify-jwt --project-ref xixmneooyufbeftdfpcm
 
 # 3. Secrets (Edge)
 supabase secrets set WM_SECRET="$(openssl rand -hex 32)" \
@@ -37,6 +39,8 @@ npm run validate && git push
 | `WM_SECRET` | Supabase Edge | HMAC root for watermark keys. Rotating it breaks detection of copies issued before rotation. Never rotate casually; if you must, keep the old value and add versioning first. |
 | `API_PUBLIC_BASE` | Supabase Edge | Base URL in response `links`. |
 | `C2PA_WORKER_URL`, `C2PA_WORKER_TOKEN` | Supabase Edge | Content Credentials signer. |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Supabase Edge | Subscriptions. The webhook must subscribe to `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`. |
+| `STRIPE_PRICE_BUSINESS` | Supabase Edge | Optional recurring price id for the Business plan. Without it Checkout uses inline pricing at $249/month. |
 | `VYBZ_API_BASE` | Vercel | Hosted MCP → API base (default vybz.cloud/v1). |
 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | Vercel | Console client. |
 
@@ -51,6 +55,8 @@ Container on any glibc 2.39+ host (Ubuntu 24.04 image). `docker compose up -d --
 **Key compromised.** Console → API keys → Revoke. Confirm in the audit log that calls stop. Create a replacement with narrower scopes.
 
 **Chain reports `ok: false`.** Do not write to the organization. Export `provenance_chain` for the org ordered by `seq`, locate `first_bad_seq`, compare `prev_hash` linkage. This indicates database tampering or a failed partial write; restore from point-in-time backup to before the bad sequence.
+
+**Plan did not update after payment.** Check the Stripe webhook delivery for `checkout.session.completed` with `metadata.kind = org_plan`; replay it. `org_billing` holds the subscription id and status; `orgs.plan` is what the gateway enforces.
 
 **Rate bucket growth.** `select public.api_rate_buckets_prune();` on a daily schedule (Supabase cron).
 

@@ -1,0 +1,14 @@
+drop function if exists public.api_plan_check(uuid, text);
+drop function if exists public.org_plan_usage(uuid);
+drop function if exists public.plan_limits(text);
+drop function if exists public.billing_org_for_subscription(text);
+drop function if exists public.billing_apply(uuid, text, text, text, timestamptz, text);
+drop table if exists public.org_billing;
+drop function if exists public.org_member_remove(uuid, uuid);
+drop function if exists public.org_member_set_role(uuid, uuid, text);
+drop function if exists public.org_members_list(uuid);
+drop function if exists public.org_invites_list(uuid);
+drop function if exists public.org_invite_revoke(uuid);
+drop function if exists public.org_invite_accept(text);
+drop function if exists public.org_invite_create(uuid, text, text);
+drop table if exists public.org_invites;

@@ -52,7 +52,11 @@ Every capability is an MCP tool. Hosted at `https://vybz.cloud/api/mcp` for zero
 | Business | $249 / month | Unlimited keys and members; 10,000 issuances and 2,000 detections included, then metered; 1 TB Vault; CA-issued Content Credentials certificate; audit export; 99.9% SLA. |
 | Enterprise | Custom | Volume pricing, dedicated signing certificate, private deployment, SSO, retention controls, named support. |
 
-Meters: issuances, detections, unique stored bytes. Reads are free.
+Meters: issuances, detections, unique stored bytes. Reads are free. Developer limits are hard caps enforced by the API with `402 plan_limit_reached`; Business and Enterprise are metered beyond the included quantities and billed in arrears.
+
+## Teams
+
+Organizations have an owner, admins, and members. Admins manage keys, members, and billing; members read everything. Invites are single-use links that expire in 14 days, created in **Console → Members** and accepted at `/console/join`.
 
 ## Non-goals
 

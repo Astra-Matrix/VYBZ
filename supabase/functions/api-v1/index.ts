@@ -170,6 +170,19 @@ async function chain(ctx: Ctx, assetId: string | null, event: string, payload: R
 
 // ── Platform ────────────────────────────────────────────────────────────────
 
+/** Plan enforcement. Developer is hard-capped; paid plans are metered beyond their included quantities. */
+async function planCheck(ctx: Ctx, kind: "issue" | "detect" | "storage"): Promise<void> {
+  const { data, error } = await admin.rpc("api_plan_check", { p_org: ctx.principal.orgId, p_kind: kind });
+  if (error) return; // never block on a billing lookup failure
+  const row = Array.isArray(data) ? data[0] : data;
+  if (row && row.allowed === false) {
+    const what = kind === "storage" ? "bytes of storage" : kind === "issue" ? "issuances per month" : "detections per month";
+    throw new ApiError(402, "plan_limit_reached", `The ${row.plan} plan includes ${row.included} ${what}; ${row.used} used. Upgrade in the console.`, {
+      plan: row.plan, used: Number(row.used), included: Number(row.included), upgrade: "https://vybz.cloud/console/billing",
+    });
+  }
+}
+
 function descriptor() {
   return {
     object: "vybz.api",
@@ -209,6 +222,7 @@ async function me(ctx: Ctx) {
 
 async function registerAsset(ctx: Ctx) {
   requireScope(ctx.principal, "provenance:write");
+  await planCheck(ctx, "storage");
   const bytes = await readBinary(ctx.req, MAX_AUDIO_BYTES);
   ctx.bytesIn = bytes.byteLength;
   const wav = parseWav(bytes);
@@ -314,6 +328,7 @@ async function chainVerify(ctx: Ctx) {
 async function issue(ctx: Ctx, id: string) {
   requireScope(ctx.principal, "provenance:write");
   if (!WM_SECRET) throw new ApiError(503, "not_configured", "Watermarking is not configured on this deployment.");
+  await planCheck(ctx, "issue");
   const a = await getAsset(ctx, id);
   const body = await readJson<{ recipient?: string; license?: string; store?: boolean; c2pa?: boolean }>(ctx.req);
   const recipient = String(body.recipient ?? "").trim();
@@ -454,6 +469,7 @@ function decide(
 async function detect(ctx: Ctx, id: string) {
   requireScope(ctx.principal, "provenance:detect");
   if (!WM_SECRET) throw new ApiError(503, "not_configured", "Watermark detection is not configured on this deployment.");
+  await planCheck(ctx, "detect");
   const a = await getAsset(ctx, id);
   const bytes = await readBinary(ctx.req, MAX_AUDIO_BYTES);
   ctx.bytesIn = bytes.byteLength;
@@ -593,6 +609,7 @@ async function showRepo(ctx: Ctx, id: string) {
 async function uploadBlob(ctx: Ctx, id: string) {
   requireScope(ctx.principal, "vault:write");
   const r = await getRepo(ctx, id);
+  await planCheck(ctx, "storage");
   const bytes = await readBinary(ctx.req, MAX_BLOB_BYTES);
   ctx.bytesIn = bytes.byteLength;
   const hash = await sha256Hex(bytes);
