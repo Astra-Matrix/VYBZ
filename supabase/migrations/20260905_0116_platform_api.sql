@@ -434,3 +434,11 @@ revoke all on function public.vault_advance_branch(uuid, uuid, text, text, text)
 revoke all on function public.provenance_chain_append(uuid, uuid, text, jsonb) from public, anon, authenticated;
 revoke all on function public.api_rate_buckets_prune() from public, anon, authenticated;
 revoke all on function public.provenance_chain_verify_service(uuid) from public, anon, authenticated;
+
+-- The gateway runs as service_role, which does not inherit PUBLIC grants once revoked.
+grant execute on function public.api_key_authenticate(text) to service_role;
+grant execute on function public.api_record_call(uuid, uuid, text, text, int, int, bigint, bigint, text, text, text, jsonb) to service_role;
+grant execute on function public.vault_advance_branch(uuid, uuid, text, text, text) to service_role;
+grant execute on function public.provenance_chain_append(uuid, uuid, text, jsonb) to service_role;
+grant execute on function public.api_rate_buckets_prune() to service_role;
+grant execute on function public.provenance_chain_verify_service(uuid) to service_role;
