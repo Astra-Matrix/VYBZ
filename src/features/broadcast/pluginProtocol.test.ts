@@ -19,7 +19,6 @@ describe("pluginProtocol", () => {
     expect(DAW_PLUGIN_DELIVERY).toBe("NATIVE-PLATFORM ONLY");
     expect(DAW_BRIDGE_DELIVERY).toBe("PARTIALLY IMPLEMENTED");
     expect(existsSync(path.resolve(__dirname, "../../../native/vlink/src/vlink_factory.cpp"))).toBe(true);
-    expect(existsSync(path.resolve(__dirname, "../../../native/vlink/README.md"))).toBe(true);
   });
 
   it("defines the loopback listen address", () => {

@@ -1,125 +1,46 @@
-# VYBZ Privacy Policy
+# Privacy Policy
 
-**Controller:** Astra Matrix, Inc. (“Astra Matrix,” “we,” “us,” or “our”)  
-**Service:** VYBZ — https://vybz.cloud  
-**Effective Date:** July 28, 2026 **Version:** 4.0
+Effective 2026-09-05. Astra Matrix, Inc. ("VYBZ") operates vybz.cloud and the VYBZ API.
 
-This Policy explains what personal information we collect, how we use and share it, and your rights. By using VYBZ or joining the alpha waitlist, you agree. If you do not agree, do not use the Service.
+## What we collect
 
-VYBZ is an **identity-first audio intelligence and release preparation platform** for independent artists, producers and engineers (analyse, master, publish, stream, support with Vc, live). We do not offer anonymous accounts. We do not sell personal information for advertising. VYBZ provides no dating or adult-intent features.
+| Category | Examples | Why |
+|---|---|---|
+| Account | Email, password hash, passkey credential ids | Sign-in and account recovery |
+| Organization | Name, slug, plan, members, roles | Access control and billing |
+| API activity | Method, path, status, latency, bytes, user agent, request id, key id | Security, audit, billing, support |
+| Customer content | Audio originals, issued copies, project files, commit metadata, recipient identifiers you supply | Providing the Service |
+| Billing | Handled by Stripe; we store plan, invoice references, and status | Payment |
+| Site analytics | Aggregated page views | Improving the site |
 
----
+We do not sell personal data and do not use customer content to train models.
 
-## 1. Information We Collect
+## Recipient identifiers
 
-### 1.1 Account & authentication
-Email, auth credentials (passkeys / passwords via our auth provider), username, display name, account IDs.
+When you issue a watermarked copy you supply a recipient identifier (often an email). It is stored with the issuance so the copy can be attributed. You are the controller of that data; treat it under your own privacy obligations.
 
-### 1.2 Alpha waitlist
-Email address and join timestamp if you sign up on the marketing landing before or without creating an account. Used only to notify you about launch / alpha access and related product updates. You may unsubscribe via email links.
+## Where data lives
 
-### 1.3 Profile & preferences
-Bio, avatar, location (if shared), genres, roles, DAWs and plugins, collaborator looking-for tags, playlists metadata, privacy toggles, and cosmetics.
+Supabase (PostgreSQL and object storage) in the United States (us-west-1), Vercel for the site and hosted MCP, Stripe for payments, Resend for transactional email. Enterprise customers may request another region.
 
-### 1.4 User content
-Audio uploads, waveforms, timestamped comments, images, messages (DM / room / live chat), reactions, live session media metadata, reports, and related metadata.
+## Retention
 
-### 1.5 Listening & recommendation signals
-Plays, completion, ratings, feedback notes, follows, queue/source choices, co-listen patterns, and other signals used for taste discovery and collaborator ranking.
+Account and organization records for the life of the account plus 30 days. Audit logs 13 months. Customer content until you delete it or close the organization. Backups roll off within 30 days.
 
-### 1.6 Payments, tips & Vc
-Tip amounts, Vc ledger events, Stripe session identifiers, optional memos. **Card and bank details are processed by Stripe**, not stored in full by Astra Matrix. Connect KYC for payouts is handled by Stripe.
+## Your rights
 
-### 1.7 Device & technical data
-IP, device/browser, diagnostics, security signals. WebRTC / SFU / TURN metadata as needed for live and cam/voice.
+Access, correction, export, and deletion are available from the console or by emailing privacy@vybz.cloud. Members of the EU, UK, and similar jurisdictions have additional rights under applicable law; the Data Processing Addendum applies to business customers.
 
-### 1.8 Cookies & local storage
-Sessions, UI preferences, and similar functional storage.
+## Security
 
----
+Encryption in transit and at rest, hashed API keys, organization-scoped row-level security, private storage with signed URLs, and a complete audit log. See the Security documentation for detail.
 
-## 2. How We Use Information
+## Cookies
 
-1. **Operate the platform** — analysis, release preparation, mastering, streaming, uploads, profiles, live, chat, waveforms/comments, VDock.
-2. **Personalize discovery** — taste-based feeds, playlists, and recommendations from listening and community signals.
-3. **Tips & cosmetics** — Vc ledger, Stripe tips/top-ups, Flair / Profile Enhancement.
-4. **Professional collaboration** — rank collaborator suggestions from craft, roles, genres, tools and catalog signals.
-5. **Alpha waitlist & launch email** — notify waitlisted emails when VYBZ launches or invites expand (Resend).
-6. **Safety & integrity** — moderation, abuse prevention, watermarking/provenance.
-7. **Communications** — transactional email/notices; optional digests if enabled.
-8. **Legal compliance.**
+The site uses a session cookie for sign-in and local storage for console preferences. No advertising cookies.
 
-We do **not** sell personal information for advertising. We do **not** paywall core messaging.
+## Changes
 
----
+We will post changes here and, for material changes, email organization owners.
 
-## 3. Legal Bases (GDPR / UK GDPR)
-Contract; legitimate interests (security, product improvement, safety); consent (waitlist/marketing email, optional digests, certain cookies, OAuth links); legal obligation.
-
----
-
-## 4. How We Share Information
-
-### 4.1 Processors
-Supabase, Vercel, Bunny.net (optional media), Resend, Stripe, and live infrastructure providers as configured — under contract, for Service operation.
-
-### 4.2 Other users
-Public profile fields, public tracks/comments, live presence you enable, and public social actions are visible as part of a music network. DMs and private rooms are limited to participants (and staff only for safety/legal review).
-
-### 4.3 Payments
-Stripe processes payment/payout data under its Privacy Policy. Tip counterparties see status needed to complete a tip.
-
-### 4.4 Law & safety
-Disclosure when required by law or to protect rights and safety. Business transfers with notice.
-
-### 4.5 We do not
-Sell your data for ads. Let affiliate links alter ranking.
-
----
-
-## 5. Profile Privacy
-You control many profile facets, including whether your city is shown. You can clear or narrow preferences in profile settings at any time.
-
----
-
-## 6. Retention
-We retain account and content data while your account is active and as needed for backups, disputes, security, and law. Waitlist emails are retained until you unsubscribe or we delete the list after launch campaigns complete. Deleted content may persist briefly in backups.
-
----
-
-## 7. Security
-Industry-standard controls; no method is 100% secure. Use a strong unique credential / passkey.
-
----
-
-## 8. Cookies
-Essential cookies/local storage for auth and preferences. Non-essential cookies only with consent where required.
-
----
-
-## 9. Your Rights
-Depending on jurisdiction (e.g. GDPR, CCPA/CPRA): access, correction, deletion, export, restrict/object, withdraw consent, and appeal. Contact privacy@vybz.cloud. You may also contact your local regulator. Waitlist: use the unsubscribe link or email privacy@vybz.cloud.
-
----
-
-## 10. Children
-VYBZ is for adults (18+). We do not knowingly collect data from children. Contact us to delete if discovered.
-
----
-
-## 11. International Transfers
-Data may be processed in the United States and other countries where our processors operate. Safeguards apply where required.
-
----
-
-## 12. Changes
-We may update this Policy; material changes will be noticed in-product or by email.
-
----
-
-## 13. Contact
-Astra Matrix, Inc. — privacy@vybz.cloud — https://vybz.cloud
-
----
-
-*Version 5.0 — analysis, release preparation, mastering, catalog, live and Vc credits; alpha waitlist. Dating and adult-intent provisions removed. Counsel should finalize before heavy commercialization.*
+Contact: privacy@vybz.cloud

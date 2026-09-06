@@ -1,37 +1,23 @@
-# VYBZ Acceptable Use Policy
+# Acceptable Use Policy
 
-**Operator:** Astra Matrix, Inc. **Service:** VYBZ  
-**Effective Date:** July 28, 2026 **Version:** 3.0
+Effective 2026-09-05. This policy is part of the Terms of Service.
 
-This AUP is part of the Terms of Service. Violations may lead to content removal, limits, suspension, or termination.
+## You may not use VYBZ to
 
-## 1. You May Not
-- Upload or distribute content you lack rights to, or that infringes IP.
-- Upload uncleared samples/third-party recordings without authorization.
-- Post unlawful, fraudulent, harassing, hateful, or non-consensual intimate content.
-- Use VYBZ to solicit romantic, sexual, or adult contact. VYBZ is a professional audio
-  platform and provides no dating or adult-intent features.
-- Share non-consensual intimate imagery, doxxing, or threats.
-- Impersonate others or run bots/fake accounts (identity-first).
-- Hack, scrape abusively, spam, or manipulate metrics / Vc earn / tip rankings.
-- Circumvent watermarking, provenance, or security.
-- Use live, chat, or collaboration features to traffic, exploit, or coerce.
-- Misuse Swarm/P2P beyond granted licenses.
-- Misrepresent affiliate links or use them to game ranking.
+- Register, store, or issue audio you do not have the right to distribute.
+- Watermark or sign content in order to misattribute it to a person or organization that did not create or license it.
+- Use detection results to harass, threaten, or dox individuals. Attribution identifies a recipient identifier you supplied; act on it through lawful channels.
+- Circumvent rate limits, scopes, or organization isolation, or probe other customers' data.
+- Run agents that attempt to exfiltrate keys, escalate scopes, or operate outside the folders you configured.
+- Store unlawful content, malware, or material that infringes third-party rights.
+- Resell the Service as a bare API without a written agreement.
 
-## 2. Music, Tip & Live Standards
-Credit accurately. Honor licenses on downloads. Live streams and waveform comments must follow this AUP. Tips via Vc or Stripe must not be used for illegal markets. Do not harass creators over tips or fabricate engagement.
+## Takedown and infringement
 
-## 3. Collaboration Standards
-Collaborator matching is professional. Represent your craft, roles and credits honestly.
-Do not use it to pursue romantic or sexual contact. VYBZ does not arrange offline meetings.
+If you believe content stored on VYBZ infringes your rights, email abuse@vybz.cloud with the URL or identifier, a description of the work, your contact details, and a statement of good-faith belief under penalty of perjury. We will act on valid notices and notify the organization that submitted the content. Repeat infringers lose access.
 
-## 4. Enforcement
-We may remove content, restrict features, or ban accounts, and report illegal activity to authorities.
+## Enforcement
 
-## 5. Reporting
-abuse@vybz.cloud — for copyright, see the DMCA policy.
+We may suspend keys, organizations, or accounts that violate this policy, with notice where practical. Serious or repeated violations result in termination.
 
----
-
-*Version 4.0 — audio platform conduct: uploads, analysis, catalog, live, Vc credits and professional collaboration. Dating and adult-intent provisions removed. Review with counsel before heavy launch marketing.*
+Contact: abuse@vybz.cloud

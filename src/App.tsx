@@ -91,6 +91,7 @@ import { PasswordLockPage } from "@/features/alpha/PasswordLockPage";
 import { hasAlphaAccess } from "@/lib/alphaAccess";
 import { needsPasswordLock } from "@/lib/passwordLock";
 import { resolveE2eFixture } from "@/app/e2eFixtures";
+import { SiteApp, isSitePath } from "@/site/SiteApp";
 
 // Vite inlines import.meta.env at build time, so this folds to `false` for production
 // and the fixture module is tree-shaken out. Enable only via `npm run build:e2e`.
@@ -140,6 +141,18 @@ export function App() {
   }
   if (location.pathname === "/settings/credits") {
     return <Navigate to="/store" replace />;
+  }
+
+  // Platform site (Provenance + Vault + Console) owns "/" and its own prefixes.
+  // The legacy creator app is reachable only behind VITE_FEATURE_LEGACY_CREATOR=on.
+  if (backendEnabled && ready && isSitePath(location.pathname)) {
+    return <SiteApp />;
+  }
+  if (backendEnabled && ready && !FLAGS.legacyCreator) {
+    if (FLAGS.prepare && isPreparePath(location.pathname)) return <PrepareLocalApp />;
+    if (isDesktopLocalPath(location.pathname)) return <DesktopLocalApp />;
+    if (isAndroidLocalPath(location.pathname)) return <AndroidLocalApp />;
+    return <Navigate to="/" replace />;
   }
 
   if (!backendEnabled) {

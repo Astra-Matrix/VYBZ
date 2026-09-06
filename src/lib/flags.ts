@@ -5,6 +5,11 @@ const off = (v: unknown) => String(v ?? "").toLowerCase() === "off" || String(v 
 const on = (v: unknown) => ["on", "true", "1"].includes(String(v ?? "").toLowerCase());
 
 export const FLAGS = {
+  /**
+   * Legacy creator app (social, live, tools). Default OFF since the platform pivot
+   * (2026-09-05). Set VITE_FEATURE_LEGACY_CREATOR=on to reach it under its old routes.
+   */
+  legacyCreator: on(import.meta.env.VITE_FEATURE_LEGACY_CREATOR),
   /** Phase O1 — creator-adjacent Role Class onboarding + badges + feed split. */
   roleClass: !off(import.meta.env.VITE_FEATURE_ROLE_CLASS),
   /** Phase O3b — Stripe Connect tips. Opt-in; secondary to cosmetics (Phase 4). */

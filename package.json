@@ -1,14 +1,9 @@
 {
-  "name": "vybz-app",
+  "name": "vybz",
   "private": true,
-  "version": "1.1.0",
-  "vybz": {
-    "release": "Beta-1A",
-    "era": "beta",
-    "codename": "Suite Genesis"
-  },
+  "version": "1.0.0",
   "type": "module",
-    "description": "VYBZ — a living social identity that becomes a creative operating system when you create. Keep originals local. Follow, talk, go live.",
+  "description": "VYBZ — Provenance and Vault for audio businesses. Forensic watermarking, Content Credentials, leak attribution, and content-addressed version control for DAW projects, with first-class access for AI agents.",
   "engines": {
     "node": ">=20"
   },
@@ -67,7 +62,10 @@
     "ios:open": "cap open ios",
     "ios:build": "npm run build:ios",
     "sync:ios": "npm run ios:sync",
-    "generate:worker": "node scripts/stable-audio-worker.mjs"
+    "generate:worker": "node scripts/stable-audio-worker.mjs",
+    "mcp:build": "npm --prefix packages/mcp-server run build",
+    "mcp:dev": "node --experimental-strip-types packages/mcp-server/src/index.ts",
+    "api:deploy": "supabase functions deploy api-v1 --no-verify-jwt"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.1",
@@ -80,6 +78,7 @@
     "@capacitor/status-bar": "^8.0.2",
     "@fontsource/atkinson-hyperlegible": "^5.3.0",
     "@fontsource/lexend": "^5.3.0",
+    "@modelcontextprotocol/sdk": "^1.17.0",
     "@simplewebauthn/browser": "^13.3.0",
     "@spotify/basic-pitch": "^1.0.1",
     "@supabase/supabase-js": "^2.108.1",
@@ -91,7 +90,8 @@
     "music-metadata": "^11.14.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.28.0"
+    "react-router-dom": "^6.28.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.4.1",

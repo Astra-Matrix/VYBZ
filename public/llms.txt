@@ -1,0 +1,37 @@
+# VYBZ
+
+> Audio infrastructure for businesses. Provenance (forensic watermarking, C2PA Content Credentials, verification, leak attribution) and Vault (content-addressed version control for DAW projects), behind one organization API key. Built for humans in a console and for AI agents over MCP.
+
+Base URL: https://vybz.cloud/v1
+Auth: `Authorization: Bearer vybz_live_<48 hex>` (create keys at https://vybz.cloud/console)
+OpenAPI 3.1: https://vybz.cloud/v1/openapi.json
+Hosted MCP: https://vybz.cloud/api/mcp (Streamable HTTP, same bearer key)
+Local MCP: `npx -y @vybz/mcp-server` with env VYBZ_API_KEY (adds folder commit/status/restore tools)
+
+## Provenance
+- POST /provenance/assets — body: raw PCM WAV; headers X-VYBZ-Title, X-VYBZ-External-Ref. Returns asset {id, sha256}. Idempotent on identical bytes.
+- POST /provenance/assets/{id}/issue — JSON {recipient, license?, store?, c2pa?}. Returns watermarked WAV bytes (or JSON with a 1h download link when Accept: application/json). Headers X-VYBZ-Issuance-Id, X-VYBZ-Watermark-Id, X-VYBZ-C2PA.
+- POST /provenance/assets/{id}/detect — body: suspect WAV. Returns {attributed, confidence: exact|high|medium|none, matches[]}.
+- POST /provenance/verify — body: any file bytes. Returns {known, kind: original|issued_copy|unknown, asset, issuance}.
+- GET /provenance/assets, /provenance/assets/{id}, /provenance/assets/{id}/issuances, /provenance/assets/{id}/ledger, /provenance/chain
+
+## Vault
+- POST /vault/repos — {name, slug?, description?, daw?}
+- POST /vault/repos/{repo}/blobs/exists — {hashes[]} → {present[], missing[]}
+- POST /vault/repos/{repo}/blobs — raw bytes; header X-VYBZ-Content-SHA256 optional. Deduplicated per organization.
+- POST /vault/repos/{repo}/commits — {branch?, message?, entries:[{path,hash,size}], parent?, meta?}. 409 head_moved on conflict; unchanged:true when tree identical.
+- GET /vault/repos, /vault/repos/{repo}, /vault/repos/{repo}/commits?ref=, /vault/repos/{repo}/commits/{sha}, /vault/repos/{repo}/tree?ref=, /vault/repos/{repo}/diff?from=&to=, /vault/repos/{repo}/branches, /vault/repos/{repo}/blobs/{hash}
+
+## Scopes
+org:read, provenance:read, provenance:write, provenance:detect, vault:read, vault:write
+
+## Errors
+JSON {error:{code, message, request_id, docs}}. 401 unauthenticated/invalid_key, 403 insufficient_scope, 409 head_moved/missing_blobs/checksum_mismatch, 413 payload_too_large, 422 validation, 429 rate_limited (Retry-After: 60).
+
+## Docs
+- https://vybz.cloud/docs/quickstart
+- https://vybz.cloud/docs/api
+- https://vybz.cloud/docs/agents
+- https://vybz.cloud/docs/provenance
+- https://vybz.cloud/docs/vault
+- https://vybz.cloud/docs/security
