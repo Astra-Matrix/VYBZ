@@ -285,7 +285,7 @@ export function PricingPage() {
   }
 
   const shown = (t: Tier): { amount: string; per: string } => {
-    const per = t.priceId ? (interval === "month" ? "per month" : "per year") : t.id === "developer" ? "forever" : "annual";
+    const per = t.cta.checkout ? (interval === "month" ? "per month" : "per year") : t.id === "developer" ? "forever" : "by agreement";
     if (t.priceId && prices) {
       const p = prices.get(t.priceId[interval]);
       if (p) return { amount: p.total, per: `${per}, ${p.currencyCode}` };
