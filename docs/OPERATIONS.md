@@ -14,8 +14,12 @@
 # 1. Database
 supabase db push                       # applies supabase/migrations/*
 
-# 2. Edge functions (api-v1 ships as one esbuild bundle plus its import map;
-#    the same bundle is what the Supabase connector deploys when the CLI is unavailable)
+# 2. Edge functions. Fastest path, no CLI login needed: a personal access token from
+#    supabase.com/dashboard/account/tokens, then one command. It bundles, uploads through the
+#    Management API, and smoke-checks the descriptor and OpenAPI document.
+#      SUPABASE_ACCESS_TOKEN=sbp_... npm run api:deploy
+#    Manual equivalent (api-v1 ships as one esbuild bundle plus its import map; the same
+#    bundle is what the Supabase connector deploys when the CLI is unavailable):
 npx esbuild supabase/functions/api-v1/index.ts --bundle --minify --format=esm --platform=neutral --target=esnext   --external:mpg123-decoder --external:@wasm-audio-decoders/flac --external:@wasm-audio-decoders/ogg-vorbis   --external:ogg-opus-decoder --external:https://esm.sh/* --outfile=/tmp/api-v1/index.js
 cp supabase/functions/api-v1/deno.json /tmp/api-v1/deno.json
 supabase functions deploy api-v1 --no-verify-jwt --project-ref xixmneooyufbeftdfpcm --import-map /tmp/api-v1/deno.json
