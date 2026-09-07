@@ -45,6 +45,10 @@ Nothing flashes, nothing loops except the ambient backdrop, and no motion carrie
 
 The mark is `public/brand/icon.svg`: a rounded square carrying the negative-space waveform on a mint-to-blue gradient (#00ff8f → #00a1ff). Full lockups with the wordmark are `logo.svg`, `logo-white.svg`, and `logo-on-white.svg`; `wordmark-letters.svg` is the letterforms alone. The header uses the mark at 26 px beside "VYBZ" in Lexend 700, 0.08em tracking. Never stretch, never recolor, never regenerate it from CSS.
 
+## Mobile and touch
+
+Every surface works on a phone. Under 820 px the primary navigation moves behind a menu button in the header; under 860 px the console and documentation sidebars collapse into a single button labelled with the current page. On coarse pointers controls grow to at least 44 px, inputs render at 16 px so iOS does not zoom, and hover-only effects (card spotlight, button sheen, logo turn) are disabled so nothing sticks after a tap. Tables and code blocks scroll inside their own container and are keyboard-focusable. The page never scrolls horizontally. Click bursts in the backdrop are faint by design: five short ticks and a thin ring at low opacity, gone in 600 ms.
+
 ## Copy patterns
 
 - Product intro: `<Product>. <Promise in one sentence>. <Who it is for>.`

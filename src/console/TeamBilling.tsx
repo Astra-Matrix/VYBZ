@@ -110,7 +110,7 @@ export function MembersPage({ org, onChanged }: { org: Org; onChanged: () => voi
         </form>
       ) : null}
 
-      <div className="vz-table-wrap" style={{ marginBottom: 16 }}>
+      <div className="vz-table-wrap" tabIndex={0} style={{ marginBottom: 16 }}>
         <table className="vz-table">
           <thead><tr><th>Email</th><th>Role</th><th>Joined</th><th /></tr></thead>
           <tbody>
@@ -145,7 +145,7 @@ export function MembersPage({ org, onChanged }: { org: Org; onChanged: () => voi
       {inv.length ? (
         <>
           <h3 className="vz-h3">Invites</h3>
-          <div className="vz-table-wrap">
+          <div className="vz-table-wrap" tabIndex={0}>
             <table className="vz-table">
               <thead><tr><th>Email</th><th>Role</th><th>Status</th><th>Expires</th><th /></tr></thead>
               <tbody>
@@ -367,7 +367,7 @@ export function BillingPage({ org, onChanged }: { org: Org; onChanged: () => voi
 
       <h3 className="vz-h3" style={{ marginTop: 24 }}>Usage history</h3>
       <p className="vz-muted" style={{ fontSize: 12.5, marginTop: 4, marginBottom: 10 }}>One report per closed month. Overage is billed on the first of the following month.</p>
-      <div className="vz-table-wrap">
+      <div className="vz-table-wrap" tabIndex={0}>
         <table className="vz-table">
           <thead><tr><th>Month</th><th>Plan</th><th>Issuances</th><th>Detections</th><th>Storage</th><th>Overage</th><th>Amount</th></tr></thead>
           <tbody>

@@ -9,6 +9,7 @@ import { AssetsPage } from "./AssetsPage";
 import { SecurityPage } from "./SecurityPage";
 import { ReferralsPage } from "./ReferralsPage";
 import { ORG_EVENT } from "@/site/AccountMenu";
+import { SideNavToggle } from "@/site/SideNavToggle";
 import { useSession } from "@/store/session";
 import { SiteShell, Code } from "@/site/SiteShell";
 import {
@@ -92,6 +93,7 @@ export function ConsolePage() {
             >
               {(orgs ?? []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
+            <SideNavToggle>
             <div className="group">Console</div>
             <NavLink to="/console" end className={({ isActive }) => (isActive ? "active" : "")}><LayoutDashboard size={15} /> Overview</NavLink>
             <NavLink to="/console/keys" className={({ isActive }) => (isActive ? "active" : "")}><KeyRound size={15} /> API keys</NavLink>
@@ -108,6 +110,7 @@ export function ConsolePage() {
             <NavLink to="/console/referrals" className={({ isActive }) => (isActive ? "active" : "")}><Gift size={15} /> Referrals</NavLink>
             <div className="group">Account</div>
             <NavLink to="/console/security" className={({ isActive }) => (isActive ? "active" : "")}><ShieldCheck size={15} /> Security</NavLink>
+            </SideNavToggle>
           </aside>
           <section>
             {org ? (
@@ -129,7 +132,7 @@ export function ConsolePage() {
                 <Route path="*" element={<Navigate to="/console" replace />} />
               </Routes>
             ) : (
-              <p className="vz-muted">Loading…</p>
+              <><h1 className="vz-sr">Console</h1><p className="vz-muted">Loading…</p></>
             )}
           </section>
         </div>
@@ -244,7 +247,7 @@ function Keys({ org }: { org: Org }) {
       {err ? <div className="vz-alert err" style={{ marginBottom: 14 }}>{err}</div> : null}
       {created ? <RevealKey k={created} onDone={() => setCreated(null)} /> : null}
       {open ? <NewKey org={org} onClose={() => setOpen(false)} onCreated={(k) => { setCreated(k); setOpen(false); void load(); }} /> : null}
-      <div className="vz-table-wrap">
+      <div className="vz-table-wrap" tabIndex={0}>
         <table className="vz-table">
           <thead><tr><th>Name</th><th>Prefix</th><th>Scopes</th><th>Limit</th><th>Last used</th><th>Status</th><th /></tr></thead>
           <tbody>
@@ -386,7 +389,7 @@ function Audit({ org }: { org: Org }) {
   return (
     <>
       <Head title="Audit log" sub="Every API and agent call, newest first. Request ids match the X-Request-Id header." />
-      <div className="vz-table-wrap">
+      <div className="vz-table-wrap" tabIndex={0}>
         <table className="vz-table">
           <thead><tr><th>Time</th><th>Call</th><th>Status</th><th>ms</th><th>In / Out</th><th>Agent</th><th>Request</th></tr></thead>
           <tbody>

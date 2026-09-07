@@ -85,6 +85,7 @@ export function HomePage() {
       </section>
 
       <section className="vz-section">
+        <h2 className="vz-sr">Products</h2>
         <div className="vz-grid vz-grid-2">
           <div className="vz-card vz-card-accent lift">
             <div className="vz-icon"><Fingerprint size={18} /></div>

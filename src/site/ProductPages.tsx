@@ -28,6 +28,7 @@ export function ProvenancePage() {
       </section>
 
       <section className="vz-section">
+        <h2 className="vz-sr">Details</h2>
         <div className="vz-grid vz-grid-3">
           {[
             ["Direct-sequence spread spectrum", "A pseudo-random chip sequence keyed to the recipient is added 34–40 dB below the signal, shaped by a local energy envelope. Inaudible in listening tests; blind-detectable without the original."],
@@ -99,6 +100,7 @@ export function VaultPage() {
       </section>
 
       <section className="vz-section">
+        <h2 className="vz-sr">Details</h2>
         <div className="vz-grid vz-grid-3">
           {[
             ["Organization-wide dedupe", "A kick sample used in 300 projects is stored once. Storage bills follow unique bytes, not project count."],
@@ -165,6 +167,7 @@ export function AgentsPage() {
       </section>
 
       <section className="vz-section">
+        <h2 className="vz-sr">Details</h2>
         <div className="vz-grid vz-grid-2">
           <div className="vz-card vz-card-accent">
             <span className="vz-pill mint">Hosted</span>
@@ -204,7 +207,7 @@ Authorization: Bearer vybz_live_…`} />
 
       <section className="vz-section">
         <h2 className="vz-h2">Tools</h2>
-        <div className="vz-table-wrap" style={{ marginTop: 16 }}>
+        <div className="vz-table-wrap" tabIndex={0} style={{ marginTop: 16 }}>
           <table className="vz-table">
             <thead><tr><th>Tool</th><th>Does</th><th>Scope</th></tr></thead>
             <tbody>
@@ -310,6 +313,7 @@ export function PricingPage() {
         {err ? <p className="vz-alert err" style={{ marginTop: 10, display: "inline-block" }}>{err}</p> : null}
       </section>
       <section className="vz-section" style={{ borderTop: 0 }}>
+        <h2 className="vz-sr">Details</h2>
         <div className="vz-grid vz-grid-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
           {TIERS.map((t) => {
             const p = shown(t);

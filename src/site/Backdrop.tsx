@@ -70,30 +70,30 @@ export function Backdrop() {
         ctx.fillRect(0, 0, w, h);
       }
 
-      // click bursts: a ring and a few colored strokes radiating from the point, gone in 800 ms
+      // click bursts: a faint ring and five short colored ticks, barely there, gone in 600 ms
       for (let i = bursts.length - 1; i >= 0; i--) {
         const b = bursts[i];
-        const p = (now - b.t0) / 800;
+        const p = (now - b.t0) / 600;
         if (p >= 1) { bursts.splice(i, 1); continue; }
         const ease = 1 - Math.pow(1 - p, 3);
         const fade = 1 - p;
         ctx.lineCap = "round";
-        const n = 9;
+        const n = 5;
         for (let k = 0; k < n; k++) {
           const ang = (k / n) * Math.PI * 2 + b.seed;
           const c = PALETTE[(k + Math.floor(b.seed * 10)) % PALETTE.length];
-          const r0 = 10 + ease * 46, r1 = r0 + 10 + (1 - ease) * 22;
-          ctx.strokeStyle = rgba(c, 0.85 * fade);
-          ctx.lineWidth = 1.4;
+          const r0 = 8 + ease * 22, r1 = r0 + 4 + (1 - ease) * 8;
+          ctx.strokeStyle = rgba(c, 0.28 * fade);
+          ctx.lineWidth = 1;
           ctx.beginPath();
           ctx.moveTo(b.x + Math.cos(ang) * r0, b.y + Math.sin(ang) * r0);
           ctx.lineTo(b.x + Math.cos(ang) * r1, b.y + Math.sin(ang) * r1);
           ctx.stroke();
         }
-        ctx.strokeStyle = rgba(CYAN, 0.35 * fade);
+        ctx.strokeStyle = rgba(CYAN, 0.12 * fade);
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.arc(b.x, b.y, 6 + ease * 70, 0, Math.PI * 2);
+        ctx.arc(b.x, b.y, 4 + ease * 30, 0, Math.PI * 2);
         ctx.stroke();
       }
 

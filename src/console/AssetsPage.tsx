@@ -184,7 +184,7 @@ function IssuePanel({ org, asset }: { org: Org; asset: Asset }) {
             <span className="vz-muted" style={{ fontSize: 12.5 }}>{result.summary.issued} issued{result.summary.errors ? `, ${result.summary.errors} failed` : ""}. Links expire in one hour.</span>
             {result.manifest?.url ? <a className="vz-btn vz-btn-ghost vz-btn-sm" href={result.manifest.url} target="_blank" rel="noopener noreferrer"><FileJson size={13} /> Manifest</a> : null}
           </div>
-          <div className="vz-table-wrap">
+          <div className="vz-table-wrap" tabIndex={0}>
             <table className="vz-table">
               <thead><tr><th>Recipient</th><th>Status</th><th>Watermark</th><th>Credentials</th><th /></tr></thead>
               <tbody>
@@ -224,7 +224,7 @@ function Issuances({ org, asset }: { org: Org; asset: Asset }) {
   if (rows === null) return <p className="vz-muted" style={{ marginTop: 12 }}>Loading…</p>;
   if (rows.length === 0) return <p className="vz-muted" style={{ marginTop: 12, fontSize: 12.5 }}>No copies issued yet.</p>;
   return (
-    <div className="vz-table-wrap" style={{ marginTop: 12 }}>
+    <div className="vz-table-wrap" tabIndex={0} style={{ marginTop: 12 }}>
       <table className="vz-table">
         <thead><tr><th>Recipient</th><th>License</th><th>Watermark</th><th>Credentials</th><th>Issued</th></tr></thead>
         <tbody>

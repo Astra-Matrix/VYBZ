@@ -16,6 +16,8 @@ We aim to conform to the Web Content Accessibility Guidelines (WCAG) 2.2 at leve
 - Drag-and-drop areas in the console also open a standard file picker, and icon-only buttons carry a text name for screen readers.
 - No time limits are imposed on completing a task, and sessions do not expire while you are working.
 - Text can be resized to 200 percent and the layout reflows without horizontal scrolling.
+- On phones and tablets every control is at least 44 pixels tall, navigation is behind a clearly labelled menu button, and effects that need a mouse pointer are switched off.
+- Long tables and code samples scroll inside their own frame, which can be reached and scrolled from the keyboard.
 
 ## Known limitations
 

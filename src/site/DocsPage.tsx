@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { NavLink, useParams, Navigate } from "react-router-dom";
 import { marked } from "marked";
+import { SideNavToggle } from "./SideNavToggle";
 import { SiteShell } from "./SiteShell";
 import { DOCS, LEGAL, docPath } from "./docsIndex";
 
@@ -9,7 +10,10 @@ export { DOCS, LEGAL } from "./docsIndex";
 marked.setOptions({ gfm: true, breaks: false });
 
 function render(md: string): string {
-  const html = marked.parse(md) as string;
+  const html = (marked.parse(md) as string)
+    .replace(/<pre>/g, '<pre tabindex="0">')
+    .replace(/<table>/g, '<div class="vz-table-wrap" tabindex="0"><table>')
+    .replace(/<\/table>/g, "</table></div>");
   // Internal links: docs/X.md → /docs/x, public/legal/x.md → /legal/x
   return html
     .replace(/href="(?:\.\.\/)*docs\/([A-Za-z_-]+)\.md"/g, (_m, n: string) => `href="/docs/${n.toLowerCase()}"`)
@@ -28,6 +32,7 @@ export function DocsPage({ legal = false }: { legal?: boolean }) {
     <SiteShell wide>
       <div className="vz-docs">
         <aside className="vz-side">
+          <SideNavToggle fallback="Contents">
           {groups.map((g) => (
             <div key={g}>
               <div className="group">{g}</div>
@@ -54,6 +59,7 @@ export function DocsPage({ legal = false }: { legal?: boolean }) {
               </a>
             </div>
           ) : null}
+          </SideNavToggle>
         </aside>
         <article className="vz-prose" dangerouslySetInnerHTML={{ __html: html }} />
       </div>

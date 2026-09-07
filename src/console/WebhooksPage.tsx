@@ -194,7 +194,7 @@ function Deliveries({ org, endpoint }: { org: Org; endpoint: Endpoint }) {
     <div style={{ marginTop: 12 }}>
       {err ? <div className="vz-alert err">{err}</div> : null}
       {rows === null ? <p className="vz-muted">Loading…</p> : rows.length === 0 ? <p className="vz-muted" style={{ fontSize: 12.5 }}>No deliveries yet. Send a test.</p> : (
-        <div className="vz-table-wrap">
+        <div className="vz-table-wrap" tabIndex={0}>
           <table className="vz-table">
             <thead><tr><th>Event</th><th>Status</th><th>Attempt</th><th>Response</th><th>Created</th><th></th></tr></thead>
             <tbody>

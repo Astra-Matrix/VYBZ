@@ -44,7 +44,7 @@ export function ReferralsPage({ org }: { org: Org }) {
         </div>
       </div>
 
-      <div className="vz-table-wrap">
+      <div className="vz-table-wrap" tabIndex={0}>
         <table className="vz-table">
           <thead><tr><th>Organization</th><th>Plan</th><th>Joined</th></tr></thead>
           <tbody>

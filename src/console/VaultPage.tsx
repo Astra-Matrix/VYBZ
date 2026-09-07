@@ -58,7 +58,7 @@ function RepoList({ org }: { org: Org }) {
           <p className="vz-p">No repositories yet. Create one here, then commit a project folder from an agent with <span className="vz-mono">vault_commit_folder</span> or from the API with <span className="vz-mono">POST /vault/repos/{"{repo}"}/commits</span>.</p>
         </div>
       ) : (
-        <div className="vz-table-wrap">
+        <div className="vz-table-wrap" tabIndex={0}>
           <table className="vz-table">
             <thead><tr><th>Repository</th><th>DAW</th><th>Default branch</th><th>Updated</th></tr></thead>
             <tbody>
@@ -214,7 +214,7 @@ function History({ rows, sel, onSelect }: { rows: Commit[] | null; sel: string |
   if (rows === null) return <p className="vz-muted">Loading…</p>;
   if (rows.length === 0) return <div className="vz-card"><p className="vz-p">This branch has no commits yet.</p></div>;
   return (
-    <div className="vz-table-wrap">
+    <div className="vz-table-wrap" tabIndex={0}>
       <table className="vz-table">
         <thead><tr><th>Commit</th><th>Message</th><th>Files</th><th>Size</th><th>Metadata</th><th>Created</th></tr></thead>
         <tbody>
@@ -332,7 +332,7 @@ function Files({ org, repo, commit, branch, headSha, onCommitted }: { org: Org; 
       ) : null}
       {err ? <div className="vz-alert err" style={{ marginBottom: 10 }}>{err}</div> : null}
       {shown === null ? <p className="vz-muted">Loading…</p> : shown.length === 0 ? <p className="vz-muted">No files match.</p> : (
-        <div className="vz-table-wrap">
+        <div className="vz-table-wrap" tabIndex={0}>
           <table className="vz-table">
             <thead><tr><th>Path</th><th>Size</th><th>Hash</th><th /></tr></thead>
             <tbody>
@@ -476,7 +476,7 @@ function Changes({ org, repo, commit }: { org: Org; repo: Repo; commit: Commit }
         {diff.summary.added} added, {diff.summary.modified} modified, {diff.summary.removed} removed.
       </p>
       {total === 0 ? <div className="vz-card"><p className="vz-p">No changes.</p></div> : (
-        <div className="vz-table-wrap">
+        <div className="vz-table-wrap" tabIndex={0}>
           <table className="vz-table">
             <thead><tr><th>Change</th><th>Path</th><th>Size</th><th>Hash</th></tr></thead>
             <tbody>

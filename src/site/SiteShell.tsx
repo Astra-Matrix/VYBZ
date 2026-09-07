@@ -4,6 +4,7 @@ import { useSession } from "@/store/session";
 import { applySeo, seoFor } from "./seo";
 import { Backdrop } from "./Backdrop";
 import { AccountMenu } from "./AccountMenu";
+import { Menu, X } from "lucide-react";
 import "./site.css";
 
 const NAV = [
@@ -17,6 +18,14 @@ const NAV = [
 export function SiteShell({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
   const { userId } = useSession();
   const location = useLocation();
+  const [navOpen, setNavOpen] = useState(false);
+  useEffect(() => { setNavOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setNavOpen(false); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [navOpen]);
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     applySeo(seoFor(location.pathname));
@@ -77,16 +86,27 @@ export function SiteShell({ children, wide = false }: { children: ReactNode; wid
             ) : (
               <>
                 <Link to="/signin" className="vz-btn vz-btn-ghost vz-btn-sm">Sign in</Link>
-                <Link to="/signin?mode=create" className="vz-btn vz-btn-primary vz-btn-sm">Get API key</Link>
+                <Link to="/signin?mode=create" className="vz-btn vz-btn-primary vz-btn-sm vz-hide-mobile">Get API key</Link>
               </>
             )}
+            <button type="button" className="vz-burger" aria-label={navOpen ? "Close menu" : "Open menu"} aria-expanded={navOpen} aria-controls="vz-mobile-nav" onClick={() => setNavOpen((v) => !v)}>
+              {navOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
           </div>
         </div>
+        <nav id="vz-mobile-nav" className={`vz-mobile-nav${navOpen ? " open" : ""}`} aria-label="Primary, mobile" hidden={!navOpen}>
+          <div className="vz-wrap">
+            {NAV.map((n) => (
+              <NavLink key={n.to} to={n.to} className={({ isActive }) => (isActive ? "active" : "")}>{n.label}</NavLink>
+            ))}
+            {userId ? <NavLink to="/console" className={({ isActive }) => (isActive ? "active" : "")}>Console</NavLink> : <NavLink to="/signin?mode=create">Get API key</NavLink>}
+          </div>
+        </nav>
       </header>
       <main id="main" tabIndex={-1} className={wide ? "vz-wrap" : "vz-wrap"} style={{ paddingBottom: 40 }}>{children}</main>
       <footer className="vz-footer">
         <div className="vz-wrap vz-footer-inner">
-          <div>
+          <div className="vz-footer-links">
             <Link to="/docs">Docs</Link>
             <Link to="/docs/api">API</Link>
             <Link to="/docs/agents">MCP</Link>
@@ -109,7 +129,7 @@ export function Code({ title, code, lang = "bash" }: { title?: string; code: str
   const [copied, setCopied] = useState(false);
   const html = highlight(code.trim(), lang);
   return (
-    <div className="vz-code" role="figure" aria-label={title ?? "code"}>
+    <div className="vz-code" role="figure" aria-label={title ?? "code"} tabIndex={0}>
       {title ? <span className="vz-code-title">{title}</span> : null}
       <button
         type="button"
