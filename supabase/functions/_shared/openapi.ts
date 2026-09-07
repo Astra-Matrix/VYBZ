@@ -53,6 +53,14 @@ export function openapiDocument(base: string) {
       "/": { get: { tags: ["Platform"], summary: "Service descriptor", security: [], responses: { "200": { description: "Products, agent entry points, docs." } } } },
       "/openapi.json": { get: { tags: ["Platform"], summary: "This document", security: [], responses: { "200": { description: "OpenAPI 3.1" } } } },
       "/me": { get: { tags: ["Platform"], summary: "Organization and key in use", responses: { "200": { description: "Org + key metadata" }, "401": err("Unauthenticated") } } },
+      "/billing/usage": {
+        get: {
+          tags: ["Platform"], summary: "Metered usage: this month and closed months",
+          description: "The running month against the plan's included quantities, followed by one report per closed month: totals, overage beyond the plan, and the amount invoiced in cents. Reports are written once a month after the period closes; developer plans have none.",
+          parameters: [{ name: "months", in: "query", schema: { type: "integer", minimum: 1, maximum: 36, default: 12 }, description: "How many closed months to return, newest first." }],
+          responses: { "200": { description: "`{ current, reports }`" }, "401": err("Unauthenticated") },
+        },
+      },
 
       "/provenance/assets": {
         post: {

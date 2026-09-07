@@ -7,17 +7,21 @@ import {
   type InviteRow,
   type MemberRow,
   type Org,
+  type UsageReportRow,
   billingCheckout,
   billingPortal,
   billingStatus,
   fmtBytes,
   fmtDate,
+  fmtMoney,
+  fmtMonth,
   inviteAccept,
   inviteCreate,
   inviteRevoke,
   invites,
   memberRemove,
   memberSetRole,
+  usageReports,
   members,
 } from "./consoleApi";
 
@@ -225,6 +229,8 @@ function Meter({ label, used, limit, fmt = (n: number) => n.toLocaleString() }: 
 export function BillingPage({ org, onChanged }: { org: Org; onChanged: () => void }) {
   const [params] = useSearchParams();
   const [st, setSt] = useState<BillingStatus | null>(null);
+  const [reports, setReports] = useState<UsageReportRow[] | null>(null);
+  useEffect(() => { usageReports(org.id).then(setReports).catch(() => setReports([])); }, [org.id]);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const load = useCallback(() => billingStatus(org.id).then(setSt).catch((e) => setErr(e instanceof Error ? e.message : String(e))), [org.id]);
@@ -281,6 +287,35 @@ export function BillingPage({ org, onChanged }: { org: Org; onChanged: () => voi
           <Meter label="Stored bytes" used={Number(u.storage_bytes)} limit={Number(u.limit_storage)} fmt={fmtBytes} />
         </div>
       ) : null}
+
+      <h3 className="vz-h3" style={{ marginTop: 24 }}>Usage history</h3>
+      <p className="vz-muted" style={{ fontSize: 12.5, marginTop: 4, marginBottom: 10 }}>One report per closed month. Overage is billed on the first of the following month.</p>
+      <div className="vz-table-wrap">
+        <table className="vz-table">
+          <thead><tr><th>Month</th><th>Plan</th><th>Issuances</th><th>Detections</th><th>Storage</th><th>Overage</th><th>Amount</th></tr></thead>
+          <tbody>
+            {reports === null ? <tr><td colSpan={7} className="vz-muted">Loading…</td></tr> : null}
+            {reports?.length === 0 ? <tr><td colSpan={7} className="vz-muted">No closed months yet. The first report appears after this month ends{plan === "developer" ? "; developer plans are not metered and produce no reports" : ""}.</td></tr> : null}
+            {reports?.map((r) => {
+              const over: string[] = [];
+              if (Number(r.over_issuances) > 0) over.push(`${Number(r.over_issuances).toLocaleString()} issuances`);
+              if (Number(r.over_detections) > 0) over.push(`${Number(r.over_detections).toLocaleString()} detections`);
+              if (Number(r.over_storage_gb) > 0) over.push(`${Number(r.over_storage_gb).toLocaleString()} GB`);
+              return (
+                <tr key={r.period}>
+                  <td>{fmtMonth(r.period)}</td>
+                  <td style={{ textTransform: "capitalize" }}>{r.plan}</td>
+                  <td className="vz-mono">{Number(r.issuances).toLocaleString()}</td>
+                  <td className="vz-mono">{Number(r.detections).toLocaleString()}</td>
+                  <td className="vz-mono">{fmtBytes(Number(r.storage_bytes))}</td>
+                  <td className="vz-muted">{over.length ? over.join(", ") : "None"}</td>
+                  <td className="vz-mono">{Number(r.amount_cents) > 0 ? fmtMoney(Number(r.amount_cents)) : <span className="vz-muted">$0.00</span>}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }

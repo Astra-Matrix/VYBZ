@@ -196,6 +196,16 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
     { title: "Who am I", description: "Show the organization, plan, key name, and scopes behind the configured API key. Call this first when a later tool answers `insufficient_scope`.", annotations: READ },
     async () => run(() => client.me()),
   );
+  server.registerTool(
+    "vybz_billing_usage",
+    {
+      title: "Billing usage",
+      description: "Metered usage for the organization: the running month against the plan's included issuances, detections, and storage, then one report per closed month with overage and the amount invoiced. Use it before a large batch to see how much of the plan remains.",
+      inputSchema: { months: z.number().int().min(1).max(36).optional().describe("Closed months to return, newest first. Default 12.") },
+      annotations: READ,
+    },
+    async (a) => run(() => client.billingUsage(a.months)),
+  );
 
   // ── Provenance ────────────────────────────────────────────────────────────
   server.registerTool(

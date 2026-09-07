@@ -73,7 +73,7 @@ describe("tool registry", () => {
         "provenance_list_assets", "provenance_list_issuances", "provenance_register", "provenance_verify",
         "vault_blob_exists", "vault_blob_link", "vault_branches", "vault_commit_entries", "vault_create_branch", "vault_create_repo", "vault_diff",
         "vault_get_commit", "vault_get_repo", "vault_history", "vault_list_repos", "vault_tree", "vault_upload_blob",
-        "vybz_whoami", "webhook_deliveries", "webhooks_create", "webhooks_delete", "webhooks_list", "webhooks_test", "webhooks_update",
+        "vybz_billing_usage", "vybz_whoami", "webhook_deliveries", "webhooks_create", "webhooks_delete", "webhooks_list", "webhooks_test", "webhooks_update",
       ].sort(),
     );
     for (const t of tools) {
@@ -99,6 +99,7 @@ describe("tool registry", () => {
     const { mcp, close } = await connect(client, { filesystem: true });
     const by = Object.fromEntries((await mcp.listTools()).tools.map((t) => [t.name, t.annotations ?? {}]));
     expect(by.vybz_whoami.readOnlyHint).toBe(true);
+    expect(by.vybz_billing_usage.readOnlyHint).toBe(true);
     expect(by.vault_tree.readOnlyHint).toBe(true);
     expect(by.vault_status.readOnlyHint).toBe(true);
     expect(by.provenance_verify.readOnlyHint).toBe(true);

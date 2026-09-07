@@ -63,9 +63,9 @@ export default async function handler(req: IncomingMessage & { body?: unknown },
   // the connecting agent's own identity through so an operator can tell
   // Claude Code from Cursor from a custom client in the log.
   const via = String(req.headers["user-agent"] ?? "").replace(/[^\x20-\x7e]/g, "").slice(0, 160).trim();
-  const client = new VybzClient({ apiKey: key, base: API_BASE, userAgent: via ? `vybz-mcp-hosted/1.1 (${via})` : "vybz-mcp-hosted/1.1" });
+  const client = new VybzClient({ apiKey: key, base: API_BASE, userAgent: via ? `vybz-mcp-hosted/1.2 (${via})` : "vybz-mcp-hosted/1.2" });
   const server = new McpServer(
-    { name: "vybz", version: "1.1.0" },
+    { name: "vybz", version: "1.2.0" },
     {
       instructions:
         "VYBZ hosted MCP. Provenance: register originals, issue watermarked copies, verify files, attribute leaks. Vault: content-addressed version control for DAW projects. Provide files as HTTPS URLs or base64; for local folders run `npx @vybz/mcp-server`.",

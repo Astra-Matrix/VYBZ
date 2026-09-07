@@ -49,6 +49,7 @@ Give it `https://vybz.cloud/v1/openapi.json` and `https://vybz.cloud/llms.txt`. 
 | Tool | Scope | Purpose |
 |---|---|---|
 | `vybz_whoami` | `org:read` | Organization, plan, key, scopes. |
+| `vybz_billing_usage` | `org:read` | This month against the plan, plus one report per closed month with overage and the amount invoiced. Optional `months`. |
 | `provenance_register` | `provenance:write` | Register a lossless original, WAV, AIFF, or FLAC (`file` / `url` / `base64`, `title`, `external_ref`). |
 | `provenance_list_assets`, `provenance_get_asset` | `provenance:read` | Browse assets. |
 | `provenance_issue` | `provenance:write` | Issue a copy to `recipient`. Returns a link, or writes `output_file` locally. |
@@ -82,7 +83,7 @@ Every tool declares the standard MCP annotations so a host can decide what to au
 
 | Annotation | Meaning here | Examples |
 |---|---|---|
-| `readOnlyHint: true` | Changes nothing the organization owns and costs nothing. | `vybz_whoami`, every list/get/tree/diff, `vault_status`, `provenance_verify` |
+| `readOnlyHint: true` | Changes nothing the organization owns and costs nothing. | `vybz_whoami`, `vybz_billing_usage`, every list/get/tree/diff, `vault_status`, `provenance_verify` |
 | `idempotentHint: false` | Repeating the call creates another record or another charge. | `provenance_issue` (new watermark each time), `provenance_detect` (metered per file), `vault_create_repo` |
 | `destructiveHint: true` | Deletes or overwrites. | `webhooks_delete`, `vault_restore` |
 | `openWorldHint: true` | Reaches outside VYBZ: fetches a URL you gave it, or contacts a customer endpoint. | `provenance_register` with `url`, `provenance_verify`, `provenance_detect`, `vault_upload_blob`, `webhooks_*` |
@@ -111,7 +112,7 @@ The hosted server has no filesystem: `file`, `files`, and `output_file` are refu
 
 - An agent can only act inside the organization of its key, within the key's scopes and rate limit.
 - Revoking the key in the console stops the agent immediately.
-- Every tool call appears in the audit log with the agent's user-agent string. Through the hosted endpoint it reads `vybz-mcp-hosted/1.1 (<the connecting client's user agent>)`, so Claude Code, Cursor, and a custom client are distinguishable in the log; through the local server it reads `vybz-mcp-local/1.1`.
+- Every tool call appears in the audit log with the agent's user-agent string. Through the hosted endpoint it reads `vybz-mcp-hosted/1.2 (<the connecting client's user agent>)`, so Claude Code, Cursor, and a custom client are distinguishable in the log; through the local server it reads `vybz-mcp-local/1.2`.
 - Local filesystem tools refuse paths outside `VYBZ_ROOTS` (case-insensitively on Windows).
 - The MCP server never prints the key, and the hosted endpoint never persists it.
 

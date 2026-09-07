@@ -206,6 +206,7 @@ Authorization: Bearer vybz_live_…`} />
             <tbody>
               {[
                 ["vybz_whoami", "Organization, plan, key, scopes", "org:read"],
+                ["vybz_billing_usage", "Plan usage this month and closed-month reports", "org:read"],
                 ["provenance_register", "Register a WAV original", "provenance:write"],
                 ["provenance_issue", "Issue a watermarked copy to a recipient", "provenance:write"],
                 ["provenance_verify", "Exact-hash verification of any file", "provenance:read"],

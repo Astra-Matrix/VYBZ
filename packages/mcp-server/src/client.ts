@@ -114,6 +114,7 @@ export class VybzClient {
 
   // Platform
   me() { return this.call<Record<string, unknown>>("GET", "/me"); }
+  billingUsage(months?: number) { return this.call<Record<string, unknown>>("GET", months ? `/billing/usage?months=${months}` : "/billing/usage"); }
 
   // Provenance
   registerAsset(wav: Uint8Array, opts: { title?: string; externalRef?: string } = {}) {

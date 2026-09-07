@@ -238,6 +238,40 @@ async function me(ctx: Ctx) {
   return json({ object: "org", org, key, via: ctx.principal.via }, 200, ctx.headers);
 }
 
+async function billingUsage(ctx: Ctx) {
+  requireScope(ctx.principal, "org:read");
+  const months = Math.min(Math.max(Number(ctx.url.searchParams.get("months") ?? 12), 1), 36);
+  const [usage, reports] = await Promise.all([
+    admin.rpc("org_plan_usage", { p_org: ctx.principal.orgId }),
+    admin.from("billing_usage_reports").select("*").eq("org_id", ctx.principal.orgId).order("period", { ascending: false }).limit(months),
+  ]);
+  const u = Array.isArray(usage.data) ? usage.data[0] : usage.data;
+  const current = u
+    ? {
+        period: new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString().slice(0, 10),
+        plan: u.plan,
+        issuances: Number(u.issuances_month),
+        detections: Number(u.detections_month),
+        storage_bytes: Number(u.storage_bytes),
+        included: { issuances: Number(u.limit_issuances), detections: Number(u.limit_detections), storage_bytes: Number(u.limit_storage) },
+        hard_cap: Boolean(u.hard_cap),
+      }
+    : null;
+  const data = (reports.data ?? []).map((r) => ({
+    object: "billing.usage_report",
+    period: r.period,
+    plan: r.plan,
+    issuances: Number(r.issuances),
+    detections: Number(r.detections),
+    storage_bytes: Number(r.storage_bytes),
+    overage: { issuances: Number(r.over_issuances), detections: Number(r.over_detections), storage_gb: Number(r.over_storage_gb) },
+    amount_cents: Number(r.amount_cents),
+    invoiced: (r.stripe_invoice_items ?? []).length > 0,
+    reported_at: r.reported_at,
+  }));
+  return json({ object: "billing.usage", current, reports: data }, 200, ctx.headers);
+}
+
 // ── Provenance ──────────────────────────────────────────────────────────────
 
 async function registerAsset(ctx: Ctx) {
@@ -1565,6 +1599,7 @@ async function route(ctx: Ctx): Promise<Response> {
 
   if (parts.length === 0 && m === "GET") return json(descriptor(), 200, ctx.headers);
   if (p0 === "me" && m === "GET") return me(ctx);
+  if (p0 === "billing" && p1 === "usage" && !p2 && m === "GET") return billingUsage(ctx);
 
   if (p0 === "provenance") {
     if (p1 === "verify" && !p2 && m === "POST") return verify(ctx);

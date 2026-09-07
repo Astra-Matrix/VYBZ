@@ -225,6 +225,28 @@ async function billingCall<T>(body: Record<string, unknown>): Promise<T> {
   if (data?.error) throw new Error(String(data.error));
   return data as T;
 }
+export type UsageReportRow = {
+  period: string; plan: string; issuances: number; detections: number; storage_bytes: number;
+  over_issuances: number; over_detections: number; over_storage_gb: number; amount_cents: number;
+  stripe_invoice_items: string[]; reported_at: string;
+};
+export async function usageReports(orgId: string, months = 12): Promise<UsageReportRow[]> {
+  const { data, error } = await client()
+    .from("billing_usage_reports")
+    .select("period,plan,issuances,detections,storage_bytes,over_issuances,over_detections,over_storage_gb,amount_cents,stripe_invoice_items,reported_at")
+    .eq("org_id", orgId)
+    .order("period", { ascending: false })
+    .limit(months);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as UsageReportRow[];
+}
+export function fmtMoney(cents: number): string {
+  return (cents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" });
+}
+export function fmtMonth(s: string): string {
+  const [y, m] = s.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(undefined, { month: "long", year: "numeric", timeZone: "UTC" });
+}
 export function billingStatus(orgId: string) { return billingCall<BillingStatus>({ action: "status", orgId }); }
 export function billingCheckout(orgId: string) { return billingCall<{ url: string }>({ action: "checkout", orgId }); }
 export function billingPortal(orgId: string) { return billingCall<{ url: string }>({ action: "portal", orgId }); }
