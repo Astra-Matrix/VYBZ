@@ -58,12 +58,13 @@ select vault.update_secret(id, '<new value>') from vault.secrets where name = 'S
 | `DECODE_WORKER_URL`, `DECODE_WORKER_TOKEN` | Supabase Edge | ffmpeg decode worker for AAC/M4A, ALAC, MP4, MOV, WebM, WMA input. Without it those formats answer `422 unsupported_audio`; WAV, AIFF, FLAC, MP3, Ogg, Opus decode in the edge regardless. |
 | `BILLING_PROVIDER` | Supabase Edge (env) | `paddle` (default when `PADDLE_API_KEY` is set) or `stripe`. Selects which provider new checkouts use; existing links keep their own provider. |
 | `PADDLE_API_KEY`, `PADDLE_ENV` | Supabase Edge (env) | Paddle Billing API key and `sandbox` or `live`. Paddle is the merchant of record: it sells the subscription, collects tax, and bills overages. |
-| `PADDLE_PRICE_BUSINESS` | Supabase Edge (env) | Monthly Business price. Live: `pri_01m1yqesgyjw5ysj92svmhxn3v` on product `pro_01m1yqes0gs9m80gxehk1gkhxk`. Sandbox: `pri_01m1ybdqphgqerhccne3my186b` on product `pro_01m1ybdqa5gvs29syp4bayhr6g`. |
+| `PADDLE_PRICE_BUSINESS` | Supabase Edge (env) | Monthly Business price used by the console's Upgrade button. Yearly (sandbox): `pri_01m1yrnhtqh0q9q60e23zvvbz7`. Live: `pri_01m1yqesgyjw5ysj92svmhxn3v` on product `pro_01m1yqes0gs9m80gxehk1gkhxk`. Sandbox: `pri_01m1ybdqphgqerhccne3my186b` on product `pro_01m1ybdqa5gvs29syp4bayhr6g`. |
 | `PADDLE_CLIENT_TOKEN` | Supabase Edge (env) | Public client-side token handed to the console so Paddle.js can open the checkout overlay. Not secret, but kept with the rest so the console has no provider configuration of its own. |
 | `PADDLE_WEBHOOK_SECRET` | Supabase Edge (env) or Vault | Endpoint secret of the notification destination pointing at `https://xixmneooyufbeftdfpcm.supabase.co/functions/v1/paddle-webhook`, subscribed to `transaction.completed` and `subscription.*`. Live destination `ntfset_01m1yqfc4vc95e14ncv50aqmrm`; sandbox `ntfset_01m1ybpgz6tmxdpfy12z61rfcy`. |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_BUSINESS` | Edge / Vault | Legacy Stripe path, kept for organizations linked before the Paddle switch. See "Stripe modes". |
 | `BILLING_CRON_SECRET` | Vault | Header `x-cron-secret` for `billing-usage-report`; `run_billing_usage_report()` reads it for the pg_cron job. |
 | `VYBZ_API_BASE` | Vercel | Hosted MCP → API base (default vybz.cloud/v1). |
+| `VITE_PADDLE_ENV`, `VITE_PADDLE_CLIENT_TOKEN`, `VITE_PADDLE_PRICE_BUSINESS_MONTH`, `VITE_PADDLE_PRICE_BUSINESS_YEAR` | Vercel (public) | The pricing page's Paddle configuration: environment (`sandbox` or `live`, never defaulted), the client-side token, and the Business price ids for that environment. Without them the page shows static prices and sends buyers to the console. |
 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | Vercel | Console client. |
 
 Nothing secret is ever prefixed `VITE_`.

@@ -3,6 +3,7 @@
  * tables; the plaintext API key exists in the browser only for the moment it
  * is shown after creation.
  */
+import { openCheckout } from "@/lib/paddle";
 import { supabase, SUPABASE_URL } from "@/lib/supabase";
 
 export type Org = { id: string; name: string; slug: string; plan: "developer" | "business" | "enterprise"; created_at: string };
@@ -223,27 +224,9 @@ export type BillingStatus = {
 };
 export type CheckoutStart = { provider: "paddle" | "stripe"; url: string | null; transaction_id?: string };
 
-/** Load Paddle.js once and open the overlay for a transaction created by the checkout function. */
+/** Open the overlay for a transaction created by the checkout function. */
 export async function openPaddleCheckout(transactionId: string, cfg: { client_token: string; environment: "sandbox" | "live" }, successUrl: string): Promise<void> {
-  type PaddleJs = { Environment: { set: (e: string) => void }; Initialize: (o: { token: string }) => void; Checkout: { open: (o: unknown) => void } };
-  const w = window as unknown as { Paddle?: PaddleJs; __vybzPaddleReady?: boolean };
-  if (!w.Paddle) {
-    await new Promise<void>((resolve, reject) => {
-      const s = document.createElement("script");
-      s.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
-      s.async = true;
-      s.onload = () => resolve();
-      s.onerror = () => reject(new Error("Paddle checkout could not be loaded."));
-      document.head.appendChild(s);
-    });
-  }
-  if (!w.Paddle) throw new Error("Paddle checkout is unavailable.");
-  if (!w.__vybzPaddleReady) {
-    if (cfg.environment === "sandbox") w.Paddle.Environment.set("sandbox");
-    w.Paddle.Initialize({ token: cfg.client_token });
-    w.__vybzPaddleReady = true;
-  }
-  w.Paddle.Checkout.open({ transactionId, settings: { displayMode: "overlay", theme: "dark", successUrl } });
+  await openCheckout({ environment: cfg.environment, token: cfg.client_token }, { transactionId, successUrl });
 }
 async function billingCall<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await client().functions.invoke("billing-checkout", { body: { ...body, origin: window.location.origin } });

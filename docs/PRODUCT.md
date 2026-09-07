@@ -53,7 +53,7 @@ Every capability is an MCP tool. Hosted at `https://vybz.cloud/api/mcp` for zero
 | Plan | Price | Includes |
 |---|---|---|
 | Developer | $0 | 1 org, 3 keys, 250 issuances and 50 detections per month, 10 GB Vault. |
-| Business | $249 / month | Unlimited keys and members; 10,000 issuances and 2,000 detections included, then metered; 1 TB Vault; CA-issued Content Credentials certificate; audit export; 99.9% SLA. |
+| Business | $249 / month, or $2,490 / year (two months free) | Unlimited keys and members; 10,000 issuances and 2,000 detections included, then metered; 1 TB Vault; CA-issued Content Credentials certificate; audit export; 99.9% SLA. |
 | Enterprise | Custom | Volume pricing, dedicated signing certificate, private deployment, SSO, retention controls, named support. |
 
 Meters: issuances, detections, unique stored bytes. Reads are free. Developer limits are hard caps enforced by the API with `402 plan_limit_reached`; Business and Enterprise are metered beyond the included quantities and billed in arrears with the next renewal.

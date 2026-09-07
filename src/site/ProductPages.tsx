@@ -1,6 +1,10 @@
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Check } from "lucide-react";
 import { SiteShell, Code } from "./SiteShell";
+import { useSession } from "@/store/session";
+import { openCheckout, paddleConfigFromEnv, previewPrices, type PricePreviewResult } from "@/lib/paddle";
+import { TIERS, type Interval, type Tier } from "./pricingTiers";
 
 export function ProvenancePage() {
   return (
@@ -234,70 +238,109 @@ Authorization: Bearer vybz_live_…`} />
   );
 }
 
-const PLANS = [
-  {
-    name: "Developer",
-    price: "$0",
-    per: "forever",
-    blurb: "Build and test. Enough for a pilot.",
-    items: ["1 organization, 3 keys", "250 issuances / month", "50 detections / month", "10 GB Vault storage", "Community support", "Hosted + local MCP"],
-    cta: "Start free",
-    to: "/signin?mode=create",
-  },
-  {
-    name: "Business",
-    price: "$249",
-    per: "per month",
-    blurb: "For catalogs, sync houses, and studios.",
-    items: ["Unlimited keys and members", "10,000 issuances / month, then $0.02", "2,000 detections / month, then $0.10", "1 TB Vault, then $0.015 / GB", "Content Credentials with CA-issued certificate", "Audit export, 99.9% SLA, email support"],
-    cta: "Talk to us",
-    to: "mailto:sales@vybz.cloud?subject=VYBZ%20Business",
-    featured: true,
-  },
-  {
-    name: "Enterprise",
-    price: "Custom",
-    per: "annual",
-    blurb: "Distributors, platforms, AI labs.",
-    items: ["Volume pricing on issuances and storage", "Dedicated signing certificate and key ceremony", "Private deployment options", "SSO and custom retention", "Solutions engineering", "Named support, 24×7"],
-    cta: "Contact sales",
-    to: "mailto:sales@vybz.cloud?subject=VYBZ%20Enterprise",
-  },
-];
-
 export function PricingPage() {
+  const { email } = useSession();
+  const navigate = useNavigate();
+  const [interval, setInterval] = useState<Interval>("month");
+  const [prices, setPrices] = useState<Map<string, PricePreviewResult> | null>(null);
+  const [country, setCountry] = useState<string | null | undefined>(undefined);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const cfg = useMemo(() => {
+    try { return paddleConfigFromEnv(); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); return null; }
+  }, []);
+  const priceIds = useMemo(() => TIERS.flatMap((t) => (t.priceId ? [t.priceId.month, t.priceId.year] : [])), []);
+
+  // Country from the edge, if Vercel provided it. Absent means "let Paddle detect it".
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/country").then((r) => (r.ok ? r.json() : { country: null })).then((j: { country?: string | null }) => { if (alive) setCountry(j.country ?? null); }).catch(() => { if (alive) setCountry(null); });
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!cfg || !priceIds.length || country === undefined) return;
+    let alive = true;
+    previewPrices(cfg, priceIds, country).then((m) => { if (alive) setPrices(m); }).catch((e) => { if (alive) setErr(e instanceof Error ? e.message : String(e)); });
+    return () => { alive = false; };
+  }, [cfg, priceIds, country]);
+
+  async function subscribe(t: Tier) {
+    if (!t.priceId) return;
+    if (!email) { navigate("/signin?mode=create&next=/pricing"); return; }
+    let orgId: string | null = null;
+    try { orgId = localStorage.getItem("vybz.console.org"); } catch { /* ignore */ }
+    if (!orgId) { navigate("/console/billing"); return; }
+    if (!cfg) { navigate("/console/billing"); return; }
+    setBusy(t.name); setErr(null);
+    try {
+      await openCheckout(cfg, {
+        priceId: t.priceId[interval],
+        email,
+        customData: { kind: "org_plan", org_id: orgId, plan: "business", interval },
+        successUrl: `${window.location.origin}/console/billing?checkout=success`,
+      });
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    setBusy(null);
+  }
+
+  const shown = (t: Tier): { amount: string; per: string } => {
+    const per = t.priceId ? (interval === "month" ? "per month" : "per year") : t.name === "Developer" ? "forever" : "annual";
+    if (t.priceId && prices) {
+      const p = prices.get(t.priceId[interval]);
+      if (p) return { amount: p.total, per: `${per}, ${p.currencyCode}` };
+    }
+    return { amount: t.fallback[interval], per };
+  };
+
   return (
     <SiteShell>
       <section className="vz-hero" style={{ paddingBottom: 12 }}>
         <span className="vz-eyebrow">Pricing</span>
         <h1 className="vz-h1">Pay for outcomes, not seats.</h1>
         <p className="vz-lead">Issuances, detections, and unique stored bytes are the only meters. Reading is always free.</p>
+        <div className="vz-tabs" role="tablist" aria-label="Billing interval" style={{ display: "inline-flex", marginTop: 18, borderBottom: 0, gap: 0, border: "1px solid var(--vz-line)", borderRadius: 999, padding: 3 }}>
+          {(["month", "year"] as Interval[]).map((i) => (
+            <button key={i} type="button" role="tab" aria-selected={interval === i} className={`vz-tab ${interval === i ? "active" : ""}`} style={{ borderRadius: 999, borderBottom: 0, margin: 0, padding: "8px 16px", background: interval === i ? "var(--vz-panel)" : "none" }} onClick={() => setInterval(i)}>
+              {i === "month" ? "Monthly" : "Yearly, two months free"}
+            </button>
+          ))}
+        </div>
+        {prices ? <p className="vz-muted" style={{ fontSize: 12.5, marginTop: 10 }}>Prices shown in your local currency, tax added at checkout.</p> : null}
+        {err ? <p className="vz-alert err" style={{ marginTop: 10, display: "inline-block" }}>{err}</p> : null}
       </section>
       <section className="vz-section" style={{ borderTop: 0 }}>
         <div className="vz-grid vz-grid-3">
-          {PLANS.map((p) => (
-            <div key={p.name} className={`vz-card ${p.featured ? "vz-card-accent" : ""}`}>
-              {p.featured ? <span className="vz-pill cyan" style={{ position: "absolute", top: 16, right: 16 }}>Most chosen</span> : null}
-              <h3 className="vz-h3">{p.name}</h3>
-              <div className="vz-stat">{p.price}<small>{p.per}</small></div>
-              <p className="vz-p">{p.blurb}</p>
-              <ul style={{ listStyle: "none", padding: 0, margin: "0 0 18px" }}>
-                {p.items.map((i) => (
-                  <li key={i} className="vz-p" style={{ display: "flex", gap: 8, alignItems: "flex-start", margin: "6px 0" }}>
-                    <Check size={15} style={{ color: "var(--vz-mint)", marginTop: 3, flex: "none" }} /> {i}
-                  </li>
-                ))}
-              </ul>
-              {p.to.startsWith("mailto:") ? (
-                <a href={p.to} className={`vz-btn ${p.featured ? "vz-btn-primary" : "vz-btn-ghost"}`} style={{ width: "100%" }}>{p.cta}</a>
-              ) : (
-                <Link to={p.to} className={`vz-btn ${p.featured ? "vz-btn-primary" : "vz-btn-ghost"}`} style={{ width: "100%" }}>{p.cta}</Link>
-              )}
-            </div>
-          ))}
+          {TIERS.map((t) => {
+            const p = shown(t);
+            return (
+              <div key={t.name} className={`vz-card ${t.featured ? "vz-card-accent" : ""}`}>
+                {t.featured ? <span className="vz-pill cyan" style={{ position: "absolute", top: 16, right: 16 }}>Most chosen</span> : null}
+                <h3 className="vz-h3">{t.name}</h3>
+                <div className="vz-stat">{p.amount}<small>{p.per}</small></div>
+                <p className="vz-p">{t.description}</p>
+                <ul style={{ listStyle: "none", padding: 0, margin: "0 0 18px" }}>
+                  {t.features.map((i) => (
+                    <li key={i} className="vz-p" style={{ display: "flex", gap: 8, alignItems: "flex-start", margin: "6px 0" }}>
+                      <Check size={15} style={{ color: "var(--vz-mint)", marginTop: 3, flex: "none" }} aria-hidden /> {i}
+                    </li>
+                  ))}
+                </ul>
+                {t.cta.checkout ? (
+                  <button type="button" className="vz-btn vz-btn-primary" style={{ width: "100%" }} disabled={busy === t.name} onClick={() => void subscribe(t)}>
+                    {busy === t.name ? "Opening checkout…" : email ? "Subscribe" : "Sign in to subscribe"}
+                  </button>
+                ) : t.cta.to.startsWith("mailto:") ? (
+                  <a href={t.cta.to} className="vz-btn vz-btn-ghost" style={{ width: "100%" }}>{t.cta.label}</a>
+                ) : (
+                  <Link to={t.cta.to} className="vz-btn vz-btn-ghost" style={{ width: "100%" }}>{t.cta.label}</Link>
+                )}
+              </div>
+            );
+          })}
         </div>
         <p className="vz-muted" style={{ fontSize: 12.5, marginTop: 18 }}>
-          Prices in USD. Metered overages are billed monthly. Watermark detection counts one call per suspect file regardless of candidates.
+          Sold by Paddle as merchant of record; tax is added at checkout. Metered overages are billed monthly with the renewal. Watermark detection counts one call per suspect file regardless of candidates.
         </p>
       </section>
     </SiteShell>

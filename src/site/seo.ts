@@ -163,6 +163,15 @@ const STATIC_ROUTES: RouteSeo[] = [
             availability: "https://schema.org/InStock",
             priceSpecification: { "@type": "UnitPriceSpecification", price: "249", priceCurrency: "USD", billingIncrement: 1, unitCode: "MON" },
           },
+          {
+            "@type": "Offer",
+            name: "Business, yearly",
+            price: "2490",
+            priceCurrency: "USD",
+            url: `${SITE}/pricing`,
+            availability: "https://schema.org/InStock",
+            priceSpecification: { "@type": "UnitPriceSpecification", price: "2490", priceCurrency: "USD", billingIncrement: 1, unitCode: "ANN" },
+          },
         ],
       },
       breadcrumb([

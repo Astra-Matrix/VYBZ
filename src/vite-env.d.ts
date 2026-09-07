@@ -15,6 +15,12 @@ interface ImportMetaEnv {
   readonly VITE_FEATURE_REPOS?: string;
   readonly VITE_FEATURE_SOCIAL_LIVE?: string;
   readonly VITE_FEATURE_PREPARE?: string;
+  /** Paddle, public: "sandbox" | "live", client-side token, Business price ids. */
+  readonly VITE_PADDLE_ENV?: string;
+  readonly VITE_PADDLE_CLIENT_TOKEN?: string;
+  readonly VITE_PADDLE_PRICE_BUSINESS_MONTH?: string;
+  readonly VITE_PADDLE_PRICE_BUSINESS_YEAR?: string;
+  readonly [key: string]: string | boolean | undefined;
 }
 
 interface ImportMeta {
