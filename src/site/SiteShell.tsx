@@ -62,6 +62,7 @@ export function SiteShell({ children, wide = false }: { children: ReactNode; wid
             <Link to="/docs/security">Security</Link>
             <Link to="/legal/terms">Terms</Link>
             <Link to="/legal/privacy">Privacy</Link>
+            <Link to="/legal/refunds">Refunds</Link>
             <Link to="/legal/acceptable-use">Acceptable use</Link>
             <Link to="/legal/accessibility">Accessibility</Link>
           </div>

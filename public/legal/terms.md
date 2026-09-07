@@ -30,7 +30,7 @@ Use is subject to the [Acceptable Use Policy](/legal/acceptable-use).
 
 **Automatic renewal.** Subscriptions renew automatically each month at the then-current price until cancelled. Metered charges for the previous month are collected with the renewal. You can cancel at any time from Console → Billing → Manage subscription, or by emailing billing@vybz.cloud; cancellation takes effect at the end of the current billing period and you keep access until then. No partial-month refunds are given except where the law requires.
 
-**Refunds.** If the Service does not work as described within the first 14 days of your first paid subscription, tell us at billing@vybz.cloud and we will refund that first payment. Metered charges reflect usage already consumed and are not refundable.
+**Refunds.** The [Refund Policy](/legal/refunds) applies: a full refund of the first subscription payment within 14 days if the Service does not work as described; renewals and metered charges are not refundable except for duplicate or mistaken charges.
 
 **Price changes.** We give at least 30 days' notice by email before a price change takes effect on your next renewal.
 
