@@ -67,8 +67,8 @@ export class ApiError extends Error {
 export const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-api-key, content-type, accept, idempotency-key, x-vybz-title, x-vybz-external-ref, x-vybz-content-sha256, x-vybz-mime, x-vybz-org",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "authorization, x-api-key, content-type, accept, idempotency-key, x-vybz-title, x-vybz-external-ref, x-vybz-content-sha256, x-vybz-mime, x-vybz-org, x-vybz-name, x-vybz-attribute, x-vybz-asset",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
   "Access-Control-Expose-Headers":
     "x-request-id, x-ratelimit-remaining, x-vybz-watermark-id, x-vybz-issuance-id, x-vybz-c2pa, x-vybz-sha256, content-disposition",
 };

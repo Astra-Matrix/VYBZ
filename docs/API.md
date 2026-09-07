@@ -207,11 +207,18 @@ Create: `{ "name", "from"?: branch|sha }`.
 
 | Scope | Grants |
 |---|---|
-| `org:read` | `/me` |
+| `org:read` | `/me`, list and read webhook endpoints and deliveries |
 | `provenance:read` | list/get assets, issuances, ledger, verify, chain |
 | `provenance:write` | register, issue |
-| `provenance:detect` | detect |
-| `vault:read` | repos, history, tree, diff, branches, blob links, exists |
+| `provenance:detect` | detect, and `verify` with `attribute=true` |
+| `vault:read` | repos, history, commits, tree, diff, branches, blob links, exists |
 | `vault:write` | create repo, upload blobs, commit, create branch |
+| `webhooks:manage` | create, update, delete, test endpoints; retry deliveries |
+
+`GET /`, `GET /openapi.json`, and `GET /provenance/formats` need no scope. A key with none of the scopes above can still authenticate and read the formats list.
+
+## CORS
+
+Every response carries `Access-Control-Allow-Origin: *`; keys are bearer secrets, not cookies, so a browser origin gains nothing from it. Preflight allows `GET, POST, PUT, PATCH, DELETE` and the request headers `Authorization`, `X-API-Key`, `Content-Type`, `Accept`, `Idempotency-Key`, `X-VYBZ-Org`, `X-VYBZ-Title`, `X-VYBZ-External-Ref`, `X-VYBZ-Content-SHA256`, `X-VYBZ-Mime`, `X-VYBZ-Name`, `X-VYBZ-Attribute`, `X-VYBZ-Asset`. Exposed: `X-Request-Id`, `X-RateLimit-Remaining`, `X-VYBZ-Watermark-Id`, `X-VYBZ-Issuance-Id`, `X-VYBZ-C2PA`, `X-VYBZ-SHA256`, `Content-Disposition`.
 
 Last updated: 2026-09-07
