@@ -247,7 +247,15 @@ export async function openPaddleCheckout(transactionId: string, cfg: { client_to
 }
 async function billingCall<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await client().functions.invoke("billing-checkout", { body: { ...body, origin: window.location.origin } });
-  if (error) throw new Error(error.message ?? "Billing is unavailable right now.");
+  if (error) {
+    // A non-2xx answer carries the provider's message in the body; surface it instead of the generic wrapper.
+    let detail: string | null = null;
+    try {
+      const ctx = (error as { context?: Response }).context;
+      if (ctx && typeof ctx.json === "function") detail = String((await ctx.json())?.error ?? "");
+    } catch { /* no JSON body */ }
+    throw new Error(detail || error.message || "Billing is unavailable right now.");
+  }
   if (data?.error) throw new Error(String(data.error));
   return data as T;
 }
