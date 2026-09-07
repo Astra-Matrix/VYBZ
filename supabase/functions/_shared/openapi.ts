@@ -93,7 +93,7 @@ export function openapiDocument(base: string) {
         post: {
           tags: ["Provenance"], summary: "Issue watermarked copies to many recipients",
           description: "One call, up to 50 recipients. The original is decoded once and each recipient receives a distinct watermark, a stored copy, and a one-hour download link. The response lists every item in order with `status: ok` or an error; the same list is stored as a JSON manifest and linked under `manifest`. Each successful item counts as one issuance. When the plan runs out mid-batch, the remaining recipients are reported as `plan_limit_reached` and nothing more is charged.",
-          parameters: [c("id", "Asset id")],
+          parameters: [idParam("id", "Asset id")],
           requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/IssueBatchRequest" } } } },
           responses: { "201": jsonOf("IssueBatch", "At least one copy issued"), "200": jsonOf("IssueBatch", "No copies issued"), "422": err("Missing or too many recipients"), "402": err("Plan limit reached before the first copy") },
         },
@@ -179,20 +179,20 @@ export function openapiDocument(base: string) {
         post: {
           tags: ["Vault"], summary: "Open a chunked upload",
           description: "For files above the single-request limit. Declare the complete file's `sha256` and `size`; the response gives `part_size` and `parts`. Send parts in order with PUT, then `complete`. If a blob with that hash already exists the response is the blob with `existed: true`. Re-opening for the same hash while a session is open returns that session (`resumed: true`) with `next_part` to continue from. Sessions expire after 24 hours.",
-          parameters: [c("repo", "Repo id or slug")],
+          parameters: [idParam("repo", "Repo id or slug")],
           requestBody: { required: true, content: { "application/json": { schema: { type: "object", properties: { sha256: { type: "string" }, size: { type: "integer" }, mime: { type: "string" } }, required: ["sha256", "size"] } } } },
           responses: { "201": jsonOf("Upload", "Session opened"), "200": { description: "Existing blob, or an open session to resume" }, "413": err("Above the chunked limit"), "402": err("Plan limit reached") },
         },
       },
       "/vault/repos/{repo}/uploads/{upload}": {
-        get: { tags: ["Vault"], summary: "Upload session status", parameters: [c("repo", "Repo id or slug"), c("upload", "Upload id")], responses: { "200": jsonOf("Upload"), "404": err("Not found") } },
-        delete: { tags: ["Vault"], summary: "Abort an upload", parameters: [c("repo", "Repo id or slug"), c("upload", "Upload id")], responses: { "200": { description: "{ id, aborted: true }" } } },
+        get: { tags: ["Vault"], summary: "Upload session status", parameters: [idParam("repo", "Repo id or slug"), idParam("upload", "Upload id")], responses: { "200": jsonOf("Upload"), "404": err("Not found") } },
+        delete: { tags: ["Vault"], summary: "Abort an upload", parameters: [idParam("repo", "Repo id or slug"), idParam("upload", "Upload id")], responses: { "200": { description: "{ id, aborted: true }" } } },
       },
       "/vault/repos/{repo}/uploads/{upload}/parts/{n}": {
         put: {
           tags: ["Vault"], summary: "Send one part",
           description: "Raw bytes of part `n` (zero-based). Every part is exactly `part_size` bytes except the last. Parts must arrive in order; `409 part_out_of_order` carries the `expected` part so a client can resume.",
-          parameters: [c("repo", "Repo id or slug"), c("upload", "Upload id"), c("n", "Part number")],
+          parameters: [idParam("repo", "Repo id or slug"), idParam("upload", "Upload id"), idParam("n", "Part number")],
           requestBody: { required: true, content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } } },
           responses: { "200": jsonOf("Upload", "Part stored"), "409": err("`part_out_of_order`, `upload_closed`"), "410": err("`upload_expired`"), "422": err("`invalid_part_size`") },
         },
@@ -201,7 +201,7 @@ export function openapiDocument(base: string) {
         post: {
           tags: ["Vault"], summary: "Finish a chunked upload",
           description: "Verifies that every part arrived and that the assembled bytes hash to the declared sha256, then records the blob. On a mismatch the partial object is discarded and `409 checksum_mismatch` reports the computed hash.",
-          parameters: [c("repo", "Repo id or slug"), c("upload", "Upload id")],
+          parameters: [idParam("repo", "Repo id or slug"), idParam("upload", "Upload id")],
           responses: { "201": jsonOf("Blob", "Blob recorded"), "200": jsonOf("Blob", "Already completed"), "409": err("`upload_incomplete`, `checksum_mismatch`, `upload_closed`") },
         },
       },
