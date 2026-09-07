@@ -64,6 +64,10 @@ Meters: issuances, detections, unique stored bytes. Reads are free. Developer an
 
 Paid plans are sold by Paddle as merchant of record: checkout, invoices, tax, and refunds happen there, and the subscription is managed from Console → Billing. Prices exclude tax, which Paddle adds at checkout for the billing address given.
 
+## Account
+
+The avatar in the header opens the account menu: switch organization, jump to the console sections that belong to the account (API keys, billing, members, security, referrals), and sign out. **Security** changes the password and signs out every other device. **Referrals** gives each organization a link; organizations created by accounts that arrived on it are attributed to the referrer and listed, with rewards for converting referrals to follow.
+
 ## Teams
 
 Organizations have an owner, admins, and members. Admins manage keys, members, and billing; members read everything. Invites are single-use links that expire in 14 days, created in **Console → Members** and accepted at `/console/join`.

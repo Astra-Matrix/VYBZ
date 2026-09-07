@@ -3,6 +3,7 @@ import { NavLink, Link, useLocation } from "react-router-dom";
 import { useSession } from "@/store/session";
 import { applySeo, seoFor } from "./seo";
 import { Backdrop } from "./Backdrop";
+import { AccountMenu } from "./AccountMenu";
 import "./site.css";
 
 const NAV = [
@@ -14,7 +15,7 @@ const NAV = [
 ];
 
 export function SiteShell({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
-  const { userId, signOut } = useSession();
+  const { userId } = useSession();
   const location = useLocation();
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -57,7 +58,7 @@ export function SiteShell({ children, wide = false }: { children: ReactNode; wid
       <header className="vz-header">
         <div className="vz-wrap vz-header-inner">
           <Link to="/" className="vz-logo" aria-label="VYBZ home">
-            <span className="vz-logo-mark" aria-hidden />
+            <img className="vz-logo-mark" src="/brand/icon.svg" alt="" width={26} height={26} aria-hidden />
             VYBZ
           </Link>
           <nav className="vz-nav" aria-label="Primary">
@@ -71,7 +72,7 @@ export function SiteShell({ children, wide = false }: { children: ReactNode; wid
             {userId ? (
               <>
                 <Link to="/console" className="vz-btn vz-btn-primary vz-btn-sm">Console</Link>
-                <button type="button" className="vz-btn vz-btn-ghost vz-btn-sm" onClick={() => void signOut()}>Sign out</button>
+                <AccountMenu />
               </>
             ) : (
               <>

@@ -1,11 +1,14 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { KeyRound, Activity, ScrollText, Bot, LayoutDashboard, Plus, Copy, Check, ShieldCheck, Users, CreditCard, Fingerprint, Webhook, FolderGit2, AudioLines } from "lucide-react";
+import { KeyRound, Activity, ScrollText, Bot, LayoutDashboard, Plus, Copy, Check, ShieldCheck, Users, CreditCard, Fingerprint, Webhook, FolderGit2, AudioLines, Gift } from "lucide-react";
 import { MembersPage, BillingPage, JoinPage } from "./TeamBilling";
 import { VerifyPage } from "./VerifyPage";
 import { WebhooksPage } from "./WebhooksPage";
 import { VaultPage } from "./VaultPage";
 import { AssetsPage } from "./AssetsPage";
+import { SecurityPage } from "./SecurityPage";
+import { ReferralsPage } from "./ReferralsPage";
+import { ORG_EVENT } from "@/site/AccountMenu";
 import { useSession } from "@/store/session";
 import { SiteShell, Code } from "@/site/SiteShell";
 import {
@@ -20,6 +23,7 @@ import {
   counts,
   createKey,
   createOrg,
+  claimReferral,
   fmtBytes,
   fmtDate,
   listKeys,
@@ -52,6 +56,11 @@ export function ConsolePage() {
 
   useEffect(() => { if (userId) void reload(); }, [userId, reload]);
   useEffect(() => { try { if (orgId) localStorage.setItem(ORG_STORAGE, orgId); } catch { /* ignore */ } }, [orgId]);
+  useEffect(() => {
+    const onOrg = (e: Event) => setOrgId((e as CustomEvent<string>).detail);
+    window.addEventListener(ORG_EVENT, onOrg);
+    return () => window.removeEventListener(ORG_EVENT, onOrg);
+  }, []);
 
   if (!ready) return null;
   if (!userId) return <Navigate to={`/signin?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
@@ -96,6 +105,9 @@ export function ConsolePage() {
             <div className="group">Organization</div>
             <NavLink to="/console/members" className={({ isActive }) => (isActive ? "active" : "")}><Users size={15} /> Members</NavLink>
             <NavLink to="/console/billing" className={({ isActive }) => (isActive ? "active" : "")}><CreditCard size={15} /> Billing</NavLink>
+            <NavLink to="/console/referrals" className={({ isActive }) => (isActive ? "active" : "")}><Gift size={15} /> Referrals</NavLink>
+            <div className="group">Account</div>
+            <NavLink to="/console/security" className={({ isActive }) => (isActive ? "active" : "")}><ShieldCheck size={15} /> Security</NavLink>
           </aside>
           <section>
             {org ? (
@@ -112,6 +124,8 @@ export function ConsolePage() {
                 <Route path="agents" element={<Agents org={org} />} />
                 <Route path="members" element={<MembersPage org={org} onChanged={() => void reload()} />} />
                 <Route path="billing" element={<BillingPage org={org} onChanged={() => void reload()} />} />
+                <Route path="security" element={<SecurityPage org={org} />} />
+                <Route path="referrals" element={<ReferralsPage org={org} />} />
                 <Route path="*" element={<Navigate to="/console" replace />} />
               </Routes>
             ) : (
@@ -134,7 +148,9 @@ function CreateOrg({ onCreated }: { onCreated: (o: Org) => void }) {
     setBusy(true);
     setErr(null);
     try {
-      onCreated(await createOrg(name.trim(), slug || slugFromName(name)));
+      const o = await createOrg(name.trim(), slug || slugFromName(name));
+      await claimReferral(o.id);
+      onCreated(o);
     } catch (e2) {
       setErr(e2 instanceof Error ? e2.message : String(e2));
     } finally {

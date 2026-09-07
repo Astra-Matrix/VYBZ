@@ -43,7 +43,7 @@ Nothing flashes, nothing loops except the ambient backdrop, and no motion carrie
 
 ## Logo
 
-A rounded square with a conic gradient (cyan → violet → mint) and a dark inner square. Wordmark: "VYBZ" in Lexend 700, 0.08em tracking. Never stretch, never recolor.
+The mark is `public/brand/icon.svg`: a rounded square carrying the negative-space waveform on a mint-to-blue gradient (#00ff8f → #00a1ff). Full lockups with the wordmark are `logo.svg`, `logo-white.svg`, and `logo-on-white.svg`; `wordmark-letters.svg` is the letterforms alone. The header uses the mark at 26 px beside "VYBZ" in Lexend 700, 0.08em tracking. Never stretch, never recolor, never regenerate it from CSS.
 
 ## Copy patterns
 

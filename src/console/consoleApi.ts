@@ -73,6 +73,22 @@ export async function apiRequest<T>(orgId: string, method: string, path: string,
   return json as T;
 }
 
+export type ReferralRow = { id: string; name: string; plan: string; created_at: string };
+export async function referrals(orgId: string): Promise<ReferralRow[]> {
+  const { data, error } = await client().rpc("org_referrals", { p_org: orgId });
+  if (error) throw new Error(friendly(error.message));
+  return (data ?? []) as ReferralRow[];
+}
+export const REF_STORAGE = "vybz.ref";
+/** Attribute a just-created organization to the referral link the account arrived on, if any. */
+export async function claimReferral(orgId: string): Promise<void> {
+  let ref: string | null = null;
+  try { ref = localStorage.getItem(REF_STORAGE); } catch { /* ignore */ }
+  if (!ref) return;
+  try { await client().rpc("org_set_referrer", { p_org: orgId, p_ref_slug: ref }); } catch { /* attribution is best effort */ }
+  try { localStorage.removeItem(REF_STORAGE); } catch { /* ignore */ }
+}
+
 export async function listOrgs(): Promise<Org[]> {
   const { data, error } = await client().rpc("my_orgs");
   if (error) throw new Error(error.message);

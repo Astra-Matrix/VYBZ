@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useSession } from "@/store/session";
+import { REF_STORAGE } from "@/console/consoleApi";
 import { SiteShell } from "./SiteShell";
 
 export function SignInPage() {
@@ -14,6 +15,8 @@ export function SignInPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const ref = params.get("ref");
+  if (ref && /^[a-z0-9-]{2,40}$/.test(ref)) { try { localStorage.setItem(REF_STORAGE, ref); } catch { /* ignore */ } }
   const nextRaw = params.get("next") ?? "";
   const next = nextRaw.startsWith("/") ? nextRaw : "/console";
   if (userId) return <Navigate to={next} replace />;
