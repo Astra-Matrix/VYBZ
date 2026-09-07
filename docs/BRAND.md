@@ -28,13 +28,14 @@ Words we avoid: drop, vibe, creator, community, magic, AI-powered, revolutionary
 | Radius | 18px cards, 12px controls | |
 | Type | Lexend (UI), system monospace (code) | |
 
-Backdrop: a single canvas paints the ground, two aurora fields (cyan top-left, violet top-right) drifting on slow sines, a faint mint field below the fold, a dot lattice fading from the top, and a soft spotlight that trails the pointer; dots near the pointer brighten to cyan and lean toward it. A low-opacity grain layer sits on top. Capped at 30 frames per second, paused when the tab is hidden, rendered once as a still image under `prefers-reduced-motion`. Cards use a 1px border and a subtle vertical gradient; accent cards carry a gradient border from cyan to violet.
+Backdrop: a single canvas paints the ground, two aurora fields (cyan top-left, violet top-right) drifting on slow sines, a faint mint field below the fold, a dot lattice fading from the top, and a soft spotlight that trails the pointer; dots near the pointer brighten and lean toward it, taking cyan, violet, or mint by their angle around the cursor. A low-opacity grain layer sits on top. Capped at 30 frames per second, paused when the tab is hidden, rendered once as a still image under `prefers-reduced-motion`. Cards use a 1px border and a subtle vertical gradient; accent cards carry a gradient border from cyan to violet.
 
 Motion, all of it easing on `cubic-bezier(.2,.7,.2,1)`:
 
 - Hero: a staged reveal. The eyebrow rule draws in, each headline line rises out of a clip with a 200 ms stagger, a light beam sweeps once beneath the headline, then the lead and the actions arrive. A thin signal line in the three brand colors draws itself once behind the headline. Total under two seconds; nothing loops.
 - Sections fade and rise 18 px as they enter the viewport, once.
-- Hover: cards lift 2 px, tint their border cyan, and carry a spotlight that follows the pointer; icons lift; primary buttons carry one sheen pass; ghost buttons and pills glow in their own color; the nav underline slides in; the logo mark turns a quarter turn.
+- Click: a burst at the pointer on the backdrop, nine short strokes in the five brand colors and a cyan ring, gone in 800 ms.
+- Hover: cards lift 1 px, tint their border cyan, and carry a spotlight that follows the pointer; icons lift; primary buttons carry one sheen pass; ghost buttons and pills glow in their own color; the nav underline slides in; the logo mark turns a quarter turn.
 - Press: 120 ms.
 - Under `prefers-reduced-motion` every animation and transition is off and the page is complete on first paint.
 

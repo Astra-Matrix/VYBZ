@@ -8,6 +8,10 @@ import { useEffect, useRef } from "react";
 const CYAN = [0, 194, 255] as const;
 const VIOLET = [139, 124, 255] as const;
 const MINT = [56, 232, 176] as const;
+const AMBER = [245, 179, 66] as const;
+const ROSE = [255, 93, 122] as const;
+const PALETTE = [CYAN, VIOLET, MINT, AMBER, ROSE] as const;
+type Burst = { x: number; y: number; t0: number; seed: number };
 
 export function Backdrop() {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -21,6 +25,7 @@ export function Backdrop() {
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     let w = 0, h = 0, raf = 0, last = 0, running = true;
     const mouse = { x: -1e4, y: -1e4, tx: -1e4, ty: -1e4, active: false };
+    const bursts: Burst[] = [];
     const t0 = performance.now();
 
     const resize = () => {
@@ -65,6 +70,33 @@ export function Backdrop() {
         ctx.fillRect(0, 0, w, h);
       }
 
+      // click bursts: a ring and a few colored strokes radiating from the point, gone in 800 ms
+      for (let i = bursts.length - 1; i >= 0; i--) {
+        const b = bursts[i];
+        const p = (now - b.t0) / 800;
+        if (p >= 1) { bursts.splice(i, 1); continue; }
+        const ease = 1 - Math.pow(1 - p, 3);
+        const fade = 1 - p;
+        ctx.lineCap = "round";
+        const n = 9;
+        for (let k = 0; k < n; k++) {
+          const ang = (k / n) * Math.PI * 2 + b.seed;
+          const c = PALETTE[(k + Math.floor(b.seed * 10)) % PALETTE.length];
+          const r0 = 10 + ease * 46, r1 = r0 + 10 + (1 - ease) * 22;
+          ctx.strokeStyle = rgba(c, 0.85 * fade);
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.moveTo(b.x + Math.cos(ang) * r0, b.y + Math.sin(ang) * r0);
+          ctx.lineTo(b.x + Math.cos(ang) * r1, b.y + Math.sin(ang) * r1);
+          ctx.stroke();
+        }
+        ctx.strokeStyle = rgba(CYAN, 0.35 * fade);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 6 + ease * 70, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
       // dot lattice, fading with depth, brightening and leaning toward the pointer
       const step = 36;
       const reach = 220;
@@ -80,7 +112,9 @@ export function Backdrop() {
           const py = y - (near > 0 ? (dy / (d || 1)) * near * 10 : 0);
           const alpha = 0.05 * depth + near * 0.55;
           const size = 1 + near * 1.6;
-          ctx.fillStyle = near > 0.15 ? rgba(CYAN, alpha) : `rgba(255,255,255,${alpha})`;
+          // dots near the pointer take a hue by angle: cyan to violet to mint around the cursor
+          const hue = near > 0.15 ? PALETTE[Math.floor(((Math.atan2(dy, dx) + Math.PI) / (Math.PI * 2)) * 3) % 3] : null;
+          ctx.fillStyle = hue ? rgba(hue, alpha) : `rgba(255,255,255,${alpha})`;
           ctx.fillRect(px, py, size, size);
         }
       }
@@ -94,6 +128,7 @@ export function Backdrop() {
 
     const onMove = (e: PointerEvent) => { mouse.tx = e.clientX; mouse.ty = e.clientY; mouse.active = true; };
     const onLeave = () => { mouse.active = false; mouse.tx = -1e4; mouse.ty = -1e4; };
+    const onDown = (e: PointerEvent) => { if (e.button === 0) { bursts.push({ x: e.clientX, y: e.clientY, t0: performance.now(), seed: Math.random() }); if (bursts.length > 6) bursts.shift(); } };
     const onVisibility = () => {
       if (document.hidden) { running = false; cancelAnimationFrame(raf); }
       else if (!reduced) { running = true; last = 0; raf = requestAnimationFrame(loop); }
@@ -106,6 +141,7 @@ export function Backdrop() {
     } else {
       window.addEventListener("pointermove", onMove, { passive: true });
       window.addEventListener("pointerleave", onLeave);
+      window.addEventListener("pointerdown", onDown, { passive: true });
       document.addEventListener("visibilitychange", onVisibility);
       raf = requestAnimationFrame(loop);
     }
@@ -115,6 +151,7 @@ export function Backdrop() {
       window.removeEventListener("resize", resize);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerleave", onLeave);
+      window.removeEventListener("pointerdown", onDown);
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);

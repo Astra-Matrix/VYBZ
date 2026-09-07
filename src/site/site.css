@@ -224,17 +224,17 @@ main:focus { outline: none; }
   transition: opacity .35s;
 }
 .vz-card:hover::after { opacity: 1; }
-.vz-card:hover { border-color: rgb(var(--vz-cyan-rgb) / 0.28); box-shadow: 0 18px 50px rgba(0,0,0,.35), 0 0 0 1px rgb(var(--vz-cyan-rgb) / 0.06); transform: translateY(-2px); }
+.vz-card:hover { border-color: rgb(var(--vz-cyan-rgb) / 0.24); box-shadow: 0 10px 30px rgba(0,0,0,.25), 0 0 0 1px rgb(var(--vz-cyan-rgb) / 0.05); transform: translateY(-1px); }
 .vz-card > * { position: relative; z-index: 1; }
 .vz-card-accent:hover::before { background: linear-gradient(135deg, rgb(var(--vz-cyan-rgb) / 0.9), rgb(var(--vz-mint) / 0.3) 45%, rgb(var(--vz-violet-rgb) / 0.9)); }
 .vz-icon { transition: transform .25s cubic-bezier(.2,.7,.2,1), box-shadow .25s; }
-.vz-card:hover .vz-icon { transform: translateY(-1px) scale(1.04); box-shadow: 0 0 24px rgb(var(--vz-cyan-rgb) / 0.25); }
+.vz-card:hover .vz-icon { transform: none; box-shadow: 0 0 24px rgb(var(--vz-cyan-rgb) / 0.25); }
 .vz-card:hover .vz-icon.violet { box-shadow: 0 0 24px rgb(var(--vz-violet-rgb) / 0.3); }
 .vz-card:hover .vz-icon.mint { box-shadow: 0 0 24px rgba(56,232,176,.3); }
 
 /* Buttons and pills answer the pointer */
 .vz-btn { transition: transform .15s cubic-bezier(.2,.7,.2,1), background .2s, border-color .2s, box-shadow .25s, filter .2s; }
-.vz-btn:hover { transform: translateY(-1px); }
+.vz-btn:hover { transform: translateY(-0.5px); }
 .vz-btn:active { transform: translateY(1px); }
 .vz-btn-primary { position: relative; overflow: hidden; }
 .vz-btn-primary::after { content: ""; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.35) 50%, transparent 70%); transform: translateX(-120%); transition: transform .6s ease; }
