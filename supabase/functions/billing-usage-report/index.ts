@@ -2,8 +2,9 @@
 //
 // Monthly overage billing for metered plans. For each organization on Business
 // or Enterprise with an active subscription, computes last month's usage beyond
-// the included quantities and creates Stripe invoice items on the customer, so
-// they land on the next subscription invoice. Idempotent per organization and
+// the included quantities and bills it through the organization's provider:
+// a one-time charge on the Paddle subscription (collected with the next
+// renewal), or Stripe invoice items for organizations still linked there. Idempotent per organization and
 // month via billing_usage_reports.
 //
 //   POST .../billing-usage-report            → reports the previous month
@@ -14,8 +15,8 @@
 // DIGEST_CRON_SECRET), or a service-role Bearer. Deploy with --no-verify-jwt.
 // Scheduled by pg_cron (migration 0119) on the 1st of each month, 06:00 UTC.
 import { admin, json } from "../_shared/edge.ts";
-import { stripe } from "../_shared/stripe.ts";
 import { secret } from "../_shared/secrets.ts";
+import { paddle } from "../_shared/paddle.ts";
 
 const RATES = {
   issuance_cents: 2,      // $0.02 per issuance over the included amount
@@ -65,16 +66,36 @@ Deno.serve(async (req: Request) => {
     const total = lines.reduce((s, l) => s + l.amount, 0);
     const items: string[] = [];
     if (!dryRun) {
-      for (const l of lines) {
-        if (l.amount < 1) continue;
-        const item = await stripe.invoiceItems.create({
-          customer: String(r.stripe_customer_id),
-          currency: "usd",
-          amount: l.amount,
-          description: l.description,
-          metadata: { vybz_org_id: String(r.org_id), period },
+      const billable = lines.filter((l) => l.amount >= 1);
+      if (billable.length && r.provider === "paddle" && r.paddle_subscription_id) {
+        // One charge with one non-catalog item per overage line, applied to the next renewal.
+        await paddle("POST", `/subscriptions/${r.paddle_subscription_id}/charge`, {
+          effective_from: "next_billing_period",
+          items: billable.map((l) => ({
+            quantity: 1,
+            price: {
+              description: l.description,
+              name: l.description.slice(0, 60),
+              unit_price: { amount: String(l.amount), currency_code: "USD" },
+              tax_mode: "account_setting",
+              product: { name: "VYBZ usage", tax_category: "saas" },
+              custom_data: { vybz_org_id: String(r.org_id), period },
+            },
+          })),
         });
-        items.push(item.id);
+        items.push(`paddle:${r.paddle_subscription_id}:${period}`);
+      } else if (billable.length && r.stripe_customer_id) {
+        const { stripe } = await import("../_shared/stripe.ts");
+        for (const l of billable) {
+          const item = await stripe.invoiceItems.create({
+            customer: String(r.stripe_customer_id),
+            currency: "usd",
+            amount: l.amount,
+            description: l.description,
+            metadata: { vybz_org_id: String(r.org_id), period },
+          });
+          items.push(item.id);
+        }
       }
       await admin.rpc("billing_usage_report_record", {
         p_org: r.org_id, p_period: period, p_plan: r.plan,
@@ -83,7 +104,7 @@ Deno.serve(async (req: Request) => {
         p_amount_cents: total, p_items: items,
       });
     }
-    results.push({ org_id: r.org_id, org: r.org_name, plan: r.plan, over: { issuances: overI, detections: overD, storage_gb: Number(overG.toFixed(3)) }, amount_cents: total, invoice_items: items });
+    results.push({ org_id: r.org_id, org: r.org_name, plan: r.plan, provider: r.provider, over: { issuances: overI, detections: overD, storage_gb: Number(overG.toFixed(3)) }, amount_cents: total, invoice_items: items });
   }
   return json({ period, dry_run: dryRun, organizations: results.length, results });
 });

@@ -19,6 +19,7 @@
     "mcp:build": "tsc -p packages/mcp-server/tsconfig.json",
     "mcp:dev": "node --experimental-strip-types packages/mcp-server/src/index.ts",
     "api:deploy": "node scripts/deploy-api.mjs",
+    "billing:deploy": "node scripts/deploy-api.mjs billing-checkout paddle-webhook billing-usage-report",
     "api:deploy:cli": "supabase functions deploy api-v1 --no-verify-jwt",
     "secrets:set": "node scripts/supabase-admin.mjs secrets set",
     "functions:list": "node scripts/supabase-admin.mjs functions list",

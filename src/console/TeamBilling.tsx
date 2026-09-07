@@ -16,6 +16,7 @@ import {
   fmtMoney,
   fmtMonth,
   inviteAccept,
+  openPaddleCheckout,
   inviteCreate,
   inviteRevoke,
   invites,
@@ -237,9 +238,26 @@ export function BillingPage({ org, onChanged }: { org: Org; onChanged: () => voi
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { if (params.get("checkout") === "success") { const t = setTimeout(() => { void load(); onChanged(); }, 2500); return () => clearTimeout(t); } }, [params, load, onChanged]);
 
-  async function go(fn: () => Promise<{ url: string }>) {
+  async function go(fn: () => Promise<{ url: string | null }>) {
     setBusy(true); setErr(null);
-    try { const { url } = await fn(); window.location.assign(url); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); setBusy(false); }
+    try {
+      const { url } = await fn();
+      if (!url) throw new Error("No link was returned.");
+      window.location.assign(url);
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); setBusy(false); }
+  }
+  async function upgrade() {
+    setBusy(true); setErr(null);
+    try {
+      const start = await billingCheckout(org.id);
+      if (start.provider === "paddle" && start.transaction_id && st?.paddle?.client_token) {
+        await openPaddleCheckout(start.transaction_id, st.paddle, `${window.location.origin}/console/billing?checkout=success`);
+        setBusy(false);
+        return;
+      }
+      if (!start.url) throw new Error("Checkout is not configured yet.");
+      window.location.assign(start.url);
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); setBusy(false); }
   }
 
   const plan = st?.plan ?? org.plan;
@@ -264,9 +282,10 @@ export function BillingPage({ org, onChanged }: { org: Org; onChanged: () => voi
              "Custom agreement. Volume pricing, dedicated signing certificate, private deployment options."}
           </p>
           {st?.billing?.current_period_end ? <p className="vz-muted" style={{ fontSize: 12.5 }}>Current period ends {fmtDate(st.billing.current_period_end)}.</p> : null}
+          {st?.provider === "paddle" ? <p className="vz-muted" style={{ fontSize: 12.5 }}>Payments and invoices are handled by Paddle, our merchant of record. Tax is calculated at checkout.</p> : null}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {plan === "developer" ? <button className="vz-btn vz-btn-primary" disabled={busy} onClick={() => void go(() => billingCheckout(org.id))}>Upgrade to Business <ArrowUpRight size={15} /></button> : null}
-            {st?.billing?.stripe_subscription_id ? <button className="vz-btn vz-btn-ghost" disabled={busy} onClick={() => void go(() => billingPortal(org.id))}>Manage subscription</button> : null}
+            {plan === "developer" ? <button className="vz-btn vz-btn-primary" disabled={busy} onClick={() => void upgrade()}>Upgrade to Business <ArrowUpRight size={15} /></button> : null}
+            {st?.billing?.subscription_id ? <button className="vz-btn vz-btn-ghost" disabled={busy} onClick={() => void go(() => billingPortal(org.id))}>Manage subscription</button> : null}
             <a className="vz-btn vz-btn-ghost" href="mailto:sales@vybz.cloud?subject=VYBZ%20Enterprise">Talk to sales</a>
           </div>
         </div>

@@ -56,9 +56,12 @@ select vault.update_secret(id, '<new value>') from vault.secrets where name = 'S
 | `API_PUBLIC_BASE` | Supabase Edge | Base URL in response `links`. |
 | `C2PA_WORKER_URL`, `C2PA_WORKER_TOKEN` | Supabase Edge | Content Credentials signer. |
 | `DECODE_WORKER_URL`, `DECODE_WORKER_TOKEN` | Supabase Edge | ffmpeg decode worker for AAC/M4A, ALAC, MP4, MOV, WebM, WMA input. Without it those formats answer `422 unsupported_audio`; WAV, AIFF, FLAC, MP3, Ogg, Opus decode in the edge regardless. |
-| `STRIPE_SECRET_KEY` | Supabase Edge (env) | Secret key of the Stripe account in use. Live: the **VYBZ** account (`acct_1TwTEtAnnpt9OYZI`). Sandbox: Astra Matrix sandbox (`acct_1UBzybAfH0i9CqRv`). |
-| `STRIPE_WEBHOOK_SECRET` | Vault | Signing secret of the webhook endpoint at `https://xixmneooyufbeftdfpcm.supabase.co/functions/v1/stripe-webhook`, subscribed to `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `account.updated`. Sandbox endpoint: `we_1UCZafAfH0i9CqRvtEUTDMyE`. |
-| `STRIPE_PRICE_BUSINESS` | Vault | Recurring $249/month price for the Business plan. Live (VYBZ): `price_1UChynAnnpt9OYZI6sxnvJ4p`, product `prod_VD8CIWhlFEW3ug`. Sandbox: `price_1UCZbEAfH0i9CqRvGOkWYCGi`, product `prod_VCzamvFsytuSwW`. |
+| `BILLING_PROVIDER` | Supabase Edge (env) | `paddle` (default when `PADDLE_API_KEY` is set) or `stripe`. Selects which provider new checkouts use; existing links keep their own provider. |
+| `PADDLE_API_KEY`, `PADDLE_ENV` | Supabase Edge (env) | Paddle Billing API key and `sandbox` or `live`. Paddle is the merchant of record: it sells the subscription, collects tax, and bills overages. |
+| `PADDLE_PRICE_BUSINESS` | Supabase Edge (env) | Monthly Business price. Sandbox: `pri_01m1ybdqphgqerhccne3my186b` on product `pro_01m1ybdqa5gvs29syp4bayhr6g`. |
+| `PADDLE_CLIENT_TOKEN` | Supabase Edge (env) | Public client-side token handed to the console so Paddle.js can open the checkout overlay. Not secret, but kept with the rest so the console has no provider configuration of its own. |
+| `PADDLE_WEBHOOK_SECRET` | Supabase Edge (env) or Vault | Endpoint secret of the notification destination pointing at `https://xixmneooyufbeftdfpcm.supabase.co/functions/v1/paddle-webhook`, subscribed to `transaction.completed` and `subscription.*`. |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_BUSINESS` | Edge / Vault | Legacy Stripe path, kept for organizations linked before the Paddle switch. See "Stripe modes". |
 | `BILLING_CRON_SECRET` | Vault | Header `x-cron-secret` for `billing-usage-report`; `run_billing_usage_report()` reads it for the pg_cron job. |
 | `VYBZ_API_BASE` | Vercel | Hosted MCP → API base (default vybz.cloud/v1). |
 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | Vercel | Console client. |
@@ -106,7 +109,15 @@ A self-signed ES256 certificate is generated into the volume on first boot, whic
 
 Four functions belong to the platform: `api-v1`, `billing-checkout`, `billing-usage-report`, `stripe-webhook`. Everything else in the project is the retired creator application or a temporary probe and can be deleted at any time; their tables are inert. `npm run functions:list` shows what is deployed and `npm run functions:retire` deletes the legacy set in one pass (both need `SUPABASE_ACCESS_TOKEN`). `npm run secrets:set -- NAME=value` sets edge secrets the same way.
 
-## Stripe modes
+## Paddle
+
+Paddle Billing is the merchant of record. The console calls `billing-checkout`, which creates a Paddle transaction for the Business price against the organization's Paddle customer and returns its id; the console opens Paddle's overlay with Paddle.js. `paddle-webhook` syncs `transaction.completed` and every `subscription.*` event into `org_billing` and `orgs.plan`. Monthly overages are one-time charges on the subscription (`billing-usage-report`), collected with the next renewal.
+
+Sandbox to live is four values and one Paddle-side step: switch `PADDLE_ENV` to `live`, set `PADDLE_API_KEY` and `PADDLE_CLIENT_TOKEN` from the live account, create the live product and price and set `PADDLE_PRICE_BUSINESS`, then create a live notification destination for the webhook URL and set `PADDLE_WEBHOOK_SECRET`. Paddle reviews the website before enabling live payments; the pricing and legal pages satisfy that review.
+
+**Plan did not update after payment.** Paddle → Developer Tools → Notifications shows each delivery and its response; replay it. The webhook logs "no organization for subscription" when the transaction lacked `custom_data.org_id`, which only happens for transactions not created by the console.
+
+## Stripe modes (legacy)
 
 Live objects exist in the VYBZ account (product and price above). Switching between sandbox and live is one dashboard action plus one SQL statement, no redeploy:
 

@@ -214,11 +214,37 @@ export type PlanUsage = {
   limit_issuances: number; limit_detections: number; limit_storage: number; hard_cap: boolean;
 };
 export type BillingStatus = {
+  provider: "paddle" | "stripe";
   plan: "developer" | "business" | "enterprise";
-  billing: { status: string; current_period_end?: string | null; stripe_subscription_id?: string | null };
+  billing: { status: string; current_period_end?: string | null; provider?: string; subscription_id?: string | null; stripe_subscription_id?: string | null };
   usage: PlanUsage | null;
   price_configured: boolean;
+  paddle: { client_token: string; environment: "sandbox" | "live" } | null;
 };
+export type CheckoutStart = { provider: "paddle" | "stripe"; url: string | null; transaction_id?: string };
+
+/** Load Paddle.js once and open the overlay for a transaction created by the checkout function. */
+export async function openPaddleCheckout(transactionId: string, cfg: { client_token: string; environment: "sandbox" | "live" }, successUrl: string): Promise<void> {
+  type PaddleJs = { Environment: { set: (e: string) => void }; Initialize: (o: { token: string }) => void; Checkout: { open: (o: unknown) => void } };
+  const w = window as unknown as { Paddle?: PaddleJs; __vybzPaddleReady?: boolean };
+  if (!w.Paddle) {
+    await new Promise<void>((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
+      s.async = true;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error("Paddle checkout could not be loaded."));
+      document.head.appendChild(s);
+    });
+  }
+  if (!w.Paddle) throw new Error("Paddle checkout is unavailable.");
+  if (!w.__vybzPaddleReady) {
+    if (cfg.environment === "sandbox") w.Paddle.Environment.set("sandbox");
+    w.Paddle.Initialize({ token: cfg.client_token });
+    w.__vybzPaddleReady = true;
+  }
+  w.Paddle.Checkout.open({ transactionId, settings: { displayMode: "overlay", theme: "dark", successUrl } });
+}
 async function billingCall<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await client().functions.invoke("billing-checkout", { body: { ...body, origin: window.location.origin } });
   if (error) throw new Error(error.message ?? "Billing is unavailable right now.");
@@ -248,5 +274,5 @@ export function fmtMonth(s: string): string {
   return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(undefined, { month: "long", year: "numeric", timeZone: "UTC" });
 }
 export function billingStatus(orgId: string) { return billingCall<BillingStatus>({ action: "status", orgId }); }
-export function billingCheckout(orgId: string) { return billingCall<{ url: string }>({ action: "checkout", orgId }); }
+export function billingCheckout(orgId: string) { return billingCall<CheckoutStart>({ action: "checkout", orgId }); }
 export function billingPortal(orgId: string) { return billingCall<{ url: string }>({ action: "portal", orgId }); }
