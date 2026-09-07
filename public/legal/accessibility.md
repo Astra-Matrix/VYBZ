@@ -1,6 +1,6 @@
 # Accessibility Statement
 
-Effective 2026-09-07. Astra Matrix, Inc. wants everyone to be able to use vybz.cloud, the VYBZ console, and the documentation, whatever tools they use to browse.
+Effective 2026-09-07. VYBZ wants everyone to be able to use vybz.cloud, the VYBZ console, and the documentation, whatever tools they use to browse.
 
 ## Standard
 

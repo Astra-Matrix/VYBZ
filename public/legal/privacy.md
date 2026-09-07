@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Effective 2026-09-07. Astra Matrix, Inc. ("VYBZ") operates vybz.cloud and the VYBZ API. This policy explains what we collect, why, where it goes, and the choices you have.
+Effective 2026-09-07. Andrew Laustrup, doing business as VYBZ ("VYBZ"), a sole proprietorship in California, United States, operates vybz.cloud and the VYBZ API. This policy explains what we collect, why, where it goes, and the choices you have.
 
 ## What we collect
 
@@ -60,4 +60,4 @@ The Service is for businesses and professionals and is not directed to anyone un
 
 We will post changes here with a new effective date and, for material changes, email organization owners at least 14 days before they take effect.
 
-Contact: privacy@vybz.cloud. Astra Matrix, Inc., Delaware, United States.
+Contact: privacy@vybz.cloud. Andrew Laustrup, doing business as VYBZ, California, United States.

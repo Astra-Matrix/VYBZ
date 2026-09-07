@@ -24,4 +24,4 @@ Typed client:
 import { VybzClient } from "@vybz/mcp-server/client";
 ```
 
-MIT © Astra Matrix, Inc.
+MIT © Andrew Laustrup (VYBZ)

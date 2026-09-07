@@ -1,6 +1,6 @@
 # Terms of Service
 
-Effective 2026-09-07. These terms govern use of the VYBZ platform, API, MCP server, and console ("Service") provided by Astra Matrix, Inc. ("VYBZ", "we"). The Service is offered to businesses and professionals. By creating an organization you confirm that you are acting for a business or in a professional capacity and that you can bind that business.
+Effective 2026-09-07. These terms govern use of the VYBZ platform, API, MCP server, and console ("Service") provided by Andrew Laustrup, doing business as VYBZ ("VYBZ", "we"), a sole proprietorship in California, United States. The Service is offered to businesses and professionals. By creating an organization you confirm that you are acting for a business or in a professional capacity and that you can bind that business.
 
 ## 1. Account and organization
 
@@ -58,6 +58,6 @@ You must comply with export control and sanctions laws that apply to you, and yo
 
 ## 12. General
 
-Delaware law governs. Disputes are resolved in the state or federal courts of Delaware. These terms, the order form, and the referenced policies are the entire agreement. We may update these terms with notice; continued use after the effective date is acceptance. If any provision is unenforceable, the rest remains in effect.
+California law governs, without regard to its conflict-of-laws rules. Disputes are resolved in the state or federal courts located in California, and each party consents to their jurisdiction. These terms, the order form, and the referenced policies are the entire agreement. We may update these terms with notice; continued use after the effective date is acceptance. If any provision is unenforceable, the rest remains in effect.
 
 Contact: legal@vybz.cloud

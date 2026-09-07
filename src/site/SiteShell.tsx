@@ -65,7 +65,7 @@ export function SiteShell({ children, wide = false }: { children: ReactNode; wid
             <Link to="/legal/acceptable-use">Acceptable use</Link>
             <Link to="/legal/accessibility">Accessibility</Link>
           </div>
-          <div>© {new Date().getFullYear()} Astra Matrix, Inc. · VYBZ</div>
+          <div>© {new Date().getFullYear()} VYBZ · Andrew Laustrup</div>
         </div>
       </footer>
     </div>

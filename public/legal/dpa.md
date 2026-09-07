@@ -1,6 +1,6 @@
 # Data Processing Addendum
 
-Effective 2026-09-07. This addendum applies when Astra Matrix, Inc. ("VYBZ", the processor) processes personal data on behalf of a customer (the controller) under the Terms of Service. It is incorporated into the Terms for every organization; no signature is required, and a countersigned copy is available on request.
+Effective 2026-09-07. This addendum applies when Andrew Laustrup, doing business as VYBZ ("VYBZ", the processor) processes personal data on behalf of a customer (the controller) under the Terms of Service. It is incorporated into the Terms for every organization; no signature is required, and a countersigned copy is available on request.
 
 ## 1. Scope and roles
 
