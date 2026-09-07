@@ -42,6 +42,8 @@
 ## Data handling
 
 - Originals and blobs are stored in the region of the Supabase project (us-west-1). Enterprise can request a dedicated project in another region.
+- The decode and Content Credentials workers run on Fly.io in San Jose. They receive audio over TLS with a bearer token, process it in memory and a per-request temporary directory, and keep nothing after the response.
+- Payment data never reaches VYBZ. Paddle, the merchant of record, collects billing details in its own checkout; VYBZ stores the customer and subscription identifiers, status, and invoice references.
 - Deleting an organization cascades to its keys, assets, issuances, chain, repositories, and blobs.
 - Backups follow the database provider's point-in-time recovery.
 
@@ -53,4 +55,4 @@ Every delivery is signed with the endpoint's secret over the timestamp and the e
 
 Email security@vybz.cloud. Include a request id when relevant. We acknowledge within two business days.
 
-Last updated: 2026-09-05
+Last updated: 2026-09-07

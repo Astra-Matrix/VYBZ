@@ -10,7 +10,9 @@
 | **Storage** | Supabase Storage | `provenance-originals` (originals and stored deliveries), `vault-blobs` (content-addressed). Private. |
 | **Hosted MCP** | Vercel Node function, `api/mcp.ts` | Streamable HTTP MCP server; proxies to the gateway with the caller's key. |
 | **Local MCP** | `packages/mcp-server` (npm `@vybz/mcp-server`) | stdio MCP with filesystem workflows. Also exports the typed client. |
-| **C2PA worker** | Node + `c2patool` in a container, `worker/c2pa` | Optional Content Credentials signing. Called by the gateway when configured. |
+| **Decode worker** | Node + ffmpeg on Fly.io, `worker/decode` | Decodes AAC, M4A, ALAC, MP4, MOV, and WebM to float WAV for verify and detect. Stateless. |
+| **C2PA worker** | Node + `c2patool` on Fly.io, `worker/c2pa` | Content Credentials signing. Called by the gateway when configured. |
+| **Billing** | Paddle (merchant of record), `billing-checkout`, `paddle-webhook`, `billing-usage-report` | Checkout, subscription sync into `org_billing` and `orgs.plan`, monthly overage charges. |
 
 ## Request path
 

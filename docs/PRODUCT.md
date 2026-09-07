@@ -56,7 +56,9 @@ Every capability is an MCP tool. Hosted at `https://vybz.cloud/api/mcp` for zero
 | Business | $249 / month | Unlimited keys and members; 10,000 issuances and 2,000 detections included, then metered; 1 TB Vault; CA-issued Content Credentials certificate; audit export; 99.9% SLA. |
 | Enterprise | Custom | Volume pricing, dedicated signing certificate, private deployment, SSO, retention controls, named support. |
 
-Meters: issuances, detections, unique stored bytes. Reads are free. Developer limits are hard caps enforced by the API with `402 plan_limit_reached`; Business and Enterprise are metered beyond the included quantities and billed in arrears.
+Meters: issuances, detections, unique stored bytes. Reads are free. Developer limits are hard caps enforced by the API with `402 plan_limit_reached`; Business and Enterprise are metered beyond the included quantities and billed in arrears with the next renewal.
+
+Paid plans are sold by Paddle as merchant of record: checkout, invoices, tax, and refunds happen there, and the subscription is managed from Console → Billing. Prices exclude tax, which Paddle adds at checkout for the billing address given.
 
 ## Teams
 
@@ -68,4 +70,4 @@ Organizations have an owner, admins, and members. Admins manage keys, members, a
 - No DAW plugin as a product. The VST3 in `native/` is retained only as a possible Vault capture source.
 - No marketplace. Customers sell; VYBZ certifies and stores.
 
-Last updated: 2026-09-05
+Last updated: 2026-09-07

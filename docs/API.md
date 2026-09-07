@@ -41,7 +41,7 @@ Service descriptor: products, agent entry points, docs. No auth required.
 Organization and key metadata.
 
 ### `GET /billing/usage?months=` — scope `org:read`
-Metered usage. `current` is the running month against the plan's included quantities (`issuances`, `detections`, `storage_bytes`, `included`, `hard_cap`). `reports` holds one entry per closed month, newest first (default 12, maximum 36): totals, `overage` beyond the plan, `amount_cents` invoiced, and `invoiced` once a Stripe invoice item exists. Reports are written on the first of the following month; developer plans are not metered and have none.
+Metered usage. `current` is the running month against the plan's included quantities (`issuances`, `detections`, `storage_bytes`, `included`, `hard_cap`). `reports` holds one entry per closed month, newest first (default 12, maximum 36): totals, `overage` beyond the plan, `amount_cents` invoiced, and `invoiced` once the charge has been placed with the billing provider. Reports are written on the first of the following month; developer plans are not metered and have none.
 
 ## Provenance
 

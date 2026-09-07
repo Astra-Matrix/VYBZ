@@ -22,6 +22,7 @@ export function SiteShell({ children, wide = false }: { children: ReactNode; wid
 
   return (
     <div className="vz">
+      <a className="vz-skip" href="#main">Skip to content</a>
       <div className="vz-backdrop" aria-hidden />
       <header className="vz-header">
         <div className="vz-wrap vz-header-inner">
@@ -51,7 +52,7 @@ export function SiteShell({ children, wide = false }: { children: ReactNode; wid
           </div>
         </div>
       </header>
-      <main className={wide ? "vz-wrap" : "vz-wrap"} style={{ paddingBottom: 40 }}>{children}</main>
+      <main id="main" tabIndex={-1} className={wide ? "vz-wrap" : "vz-wrap"} style={{ paddingBottom: 40 }}>{children}</main>
       <footer className="vz-footer">
         <div className="vz-wrap vz-footer-inner">
           <div>
@@ -62,6 +63,7 @@ export function SiteShell({ children, wide = false }: { children: ReactNode; wid
             <Link to="/legal/terms">Terms</Link>
             <Link to="/legal/privacy">Privacy</Link>
             <Link to="/legal/acceptable-use">Acceptable use</Link>
+            <Link to="/legal/accessibility">Accessibility</Link>
           </div>
           <div>© {new Date().getFullYear()} Astra Matrix, Inc. · VYBZ</div>
         </div>

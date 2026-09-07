@@ -202,3 +202,10 @@
 .vz-rise { animation: vz-rise .6s cubic-bezier(.2,.7,.2,1) both; }
 .vz-rise.d1 { animation-delay: .08s; } .vz-rise.d2 { animation-delay: .16s; } .vz-rise.d3 { animation-delay: .24s; }
 @media (prefers-reduced-motion: reduce) { .vz-rise { animation: none; } }
+
+/* Accessibility: skip link and a visible focus ring on every control */
+.vz-skip { position: absolute; left: 16px; top: -48px; z-index: 100; padding: 8px 14px; border-radius: 999px; background: var(--vz-cyan); color: #041018; font-weight: 600; text-decoration: none; transition: top .15s; }
+.vz-skip:focus { top: 12px; outline: 2px solid #fff; outline-offset: 2px; }
+:focus-visible { outline: 2px solid rgb(var(--vz-cyan-rgb) / 0.9); outline-offset: 2px; border-radius: 4px; }
+.vz-input:focus-visible { outline: none; }
+main:focus { outline: none; }

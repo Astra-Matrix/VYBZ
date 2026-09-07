@@ -18,6 +18,7 @@ import terms from "../../public/legal/terms.md?raw";
 import privacy from "../../public/legal/privacy.md?raw";
 import aup from "../../public/legal/acceptable-use.md?raw";
 import dpa from "../../public/legal/dpa.md?raw";
+import accessibility from "../../public/legal/accessibility.md?raw";
 
 export type Doc = { slug: string; title: string; body: string; group: string };
 
@@ -41,6 +42,7 @@ export const LEGAL: Doc[] = [
   { slug: "privacy", title: "Privacy Policy", body: privacy, group: "Legal" },
   { slug: "acceptable-use", title: "Acceptable Use", body: aup, group: "Legal" },
   { slug: "dpa", title: "Data Processing Addendum", body: dpa, group: "Legal" },
+  { slug: "accessibility", title: "Accessibility", body: accessibility, group: "Legal" },
 ];
 
 /** Path of a doc on the site. The overview lives at /docs itself. */

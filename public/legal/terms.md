@@ -1,6 +1,6 @@
 # Terms of Service
 
-Effective 2026-09-05. These terms govern use of the VYBZ platform, API, MCP server, and console ("Service") provided by Astra Matrix, Inc. ("VYBZ", "we").
+Effective 2026-09-07. These terms govern use of the VYBZ platform, API, MCP server, and console ("Service") provided by Astra Matrix, Inc. ("VYBZ", "we"). The Service is offered to businesses and professionals. By creating an organization you confirm that you are acting for a business or in a professional capacity and that you can bind that business.
 
 ## 1. Account and organization
 
@@ -22,9 +22,19 @@ Watermarks, Content Credentials, verification results, detections, and ledger re
 
 Use is subject to the [Acceptable Use Policy](/legal/acceptable-use).
 
-## 6. Plans and billing
+## 6. Plans, payment, and renewal
 
-Fees are stated on the pricing page or in an order form. Metered usage is billed monthly in arrears. Late amounts may result in suspension after notice. Taxes are your responsibility.
+**Plans.** Fees, included quantities, and metered rates are stated on the [pricing page](/pricing) or in an order form. Metered usage beyond a plan's included quantities is billed monthly in arrears. Developer plans are free and hard-capped.
+
+**Merchant of record.** Paid plans are sold by Paddle, our merchant of record: Paddle.com Market Limited for customers outside the United States and Paddle.com Inc. for customers in the United States. Paddle processes payment, issues invoices and receipts, calculates and collects applicable taxes, and handles refunds. Your purchase is also subject to Paddle's checkout terms shown at the time of payment. Prices are stated exclusive of taxes, which Paddle adds at checkout based on your billing address and tax status. VYBZ never receives your full payment card details.
+
+**Automatic renewal.** Subscriptions renew automatically each month at the then-current price until cancelled. Metered charges for the previous month are collected with the renewal. You can cancel at any time from Console → Billing → Manage subscription, or by emailing billing@vybz.cloud; cancellation takes effect at the end of the current billing period and you keep access until then. No partial-month refunds are given except where the law requires.
+
+**Refunds.** If the Service does not work as described within the first 14 days of your first paid subscription, tell us at billing@vybz.cloud and we will refund that first payment. Metered charges reflect usage already consumed and are not refundable.
+
+**Price changes.** We give at least 30 days' notice by email before a price change takes effect on your next renewal.
+
+**Non-payment.** If a payment fails, Paddle retries and notifies you. After 14 days of non-payment we may reduce the organization to the Developer plan's limits and, after a further 30 days, suspend it, with notice at each step. Content is not deleted for non-payment alone.
 
 ## 7. Availability and support
 
@@ -32,18 +42,22 @@ Business and Enterprise plans carry the availability commitments in their order 
 
 ## 8. Security and data
 
-We protect your data as described in the [Privacy Policy](/legal/privacy) and, for business customers, the [Data Processing Addendum](/legal/dpa).
+We protect your data as described in the [Privacy Policy](/legal/privacy) and, for business customers, the [Data Processing Addendum](/legal/dpa), which forms part of these terms whenever you submit personal data to the Service.
 
 ## 9. Termination
 
-You may close an organization at any time; content is deleted after a 30-day grace period. We may suspend or terminate for material breach, non-payment, or legal requirement, with notice where practical.
+You may close an organization at any time; content is deleted after a 30-day grace period, and you may export it through the API or console before then. We may suspend or terminate for material breach, non-payment, or legal requirement, with notice where practical.
 
 ## 10. Disclaimers and liability
 
-The Service is provided "as is" to the extent permitted by law. VYBZ's aggregate liability is limited to the fees paid in the twelve months before the claim. Neither party is liable for indirect or consequential damages.
+The Service is provided "as is" to the extent permitted by law. VYBZ's aggregate liability is limited to the fees paid in the twelve months before the claim. Neither party is liable for indirect or consequential damages. Nothing in these terms limits liability that cannot be limited by law.
 
-## 11. General
+## 11. Compliance
 
-Delaware law governs. Disputes are resolved in the state or federal courts of Delaware. These terms, the order form, and the referenced policies are the entire agreement. We may update these terms with notice; continued use after the effective date is acceptance.
+You must comply with export control and sanctions laws that apply to you, and you may not use the Service if you are located in, or are a resident of, a country or territory subject to comprehensive United States sanctions, or if you are on a restricted-party list.
+
+## 12. General
+
+Delaware law governs. Disputes are resolved in the state or federal courts of Delaware. These terms, the order form, and the referenced policies are the entire agreement. We may update these terms with notice; continued use after the effective date is acceptance. If any provision is unenforceable, the rest remains in effect.
 
 Contact: legal@vybz.cloud
