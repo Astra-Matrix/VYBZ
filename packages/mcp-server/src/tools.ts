@@ -4,14 +4,16 @@
  *   • hosted (HTTP) — no filesystem: works with URLs and base64 payloads.
  *
  * Every tool returns compact JSON text so an agent can reason over it, and
- * never echoes the API key.
+ * never echoes the API key. Every tool carries MCP annotations so a host can
+ * tell read-only tools from metered, mutating, or destructive ones before it
+ * decides whether to ask the person for approval.
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { readFile, readdir, stat, mkdir, writeFile } from "node:fs/promises";
-import { join, relative, dirname, resolve, sep } from "node:path";
+import { join, relative, dirname, resolve, sep, basename } from "node:path";
 import { sha256, VybzApiError, type NamedFile, type VybzClient } from "./client.js";
-import { basename } from "node:path";
 
 export interface ToolOptions {
   /** Allow tools that read and write the local filesystem. */
@@ -22,16 +24,47 @@ export interface ToolOptions {
 
 type ToolResult = { content: Array<{ type: "text"; text: string }>; isError?: boolean };
 
+/** Error envelope every tool returns with `isError: true`. */
+export type ToolError = {
+  error: string;
+  message: string;
+  status?: number;
+  request_id?: string;
+  /** The API's extra fields (`required_scope`, `missing`, `head`, `plan`, `upgrade`, `supported`, …). */
+  details?: Record<string, unknown>;
+};
+
 function ok(data: unknown): ToolResult {
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
 }
 
 function fail(e: unknown): ToolResult {
+  let body: ToolError;
   if (e instanceof VybzApiError) {
-    return { isError: true, content: [{ type: "text", text: JSON.stringify({ error: e.code, message: e.message, status: e.status, request_id: e.requestId }) }] };
+    body = { error: e.code, message: e.message, status: e.status, request_id: e.requestId, ...(e.details ? { details: e.details } : {}) };
+  } else {
+    body = { error: "tool_error", message: e instanceof Error ? e.message : String(e) };
   }
-  return { isError: true, content: [{ type: "text", text: JSON.stringify({ error: "tool_error", message: e instanceof Error ? e.message : String(e) }) }] };
+  return { isError: true, content: [{ type: "text", text: JSON.stringify(body) }] };
 }
+
+// ── Annotations ───────────────────────────────────────────────────────────────
+// readOnlyHint: the tool changes nothing the organization owns.
+// destructiveHint: the tool can delete or overwrite something.
+// idempotentHint: repeating the same call has no additional effect (or cost).
+// openWorldHint: the tool reaches beyond VYBZ (fetches URLs, calls customer endpoints).
+
+/** Reads. Safe to repeat, free, touches nothing outside VYBZ. */
+const READ: ToolAnnotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+/** Creates or changes a record; repeating it creates another one. */
+const WRITE: ToolAnnotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
+/** Creates or changes a record but repeating it converges on the same state. */
+const WRITE_IDEMPOTENT: ToolAnnotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+/** Removes or overwrites. */
+const DESTRUCTIVE: ToolAnnotations = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false };
+/** Metered: each call is billed as a detection and appends to the ledger. */
+const METERED: ToolAnnotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
+const open = (a: ToolAnnotations): ToolAnnotations => ({ ...a, openWorldHint: true });
 
 async function run(fn: () => Promise<unknown>): Promise<ToolResult> {
   try {
@@ -64,28 +97,64 @@ async function walk(root: string): Promise<Array<{ path: string; abs: string; si
   return out;
 }
 
-function guard(roots: string[] | undefined, p: string): string {
+/** Windows paths compare case-insensitively; a root of `D:/projects` must admit `D:/Projects/x`. */
+const fold = (p: string): string => (process.platform === "win32" ? p.toLowerCase() : p);
+
+/** Resolve a path and refuse it unless it lies under one of the allowed roots. Exported for tests. */
+export function guard(roots: string[] | undefined, p: string): string {
   const abs = resolve(p);
   if (!roots || roots.length === 0) return abs;
   const inside = roots.some((r) => {
     const base = resolve(r);
-    return abs === base || abs.startsWith(base + sep);
+    return fold(abs) === fold(base) || fold(abs).startsWith(fold(base + sep));
   });
   if (!inside) throw new Error(`Path is outside the allowed roots: ${abs}`);
   return abs;
 }
 
-async function fetchBytes(url: string, max = 200 * 1_048_576): Promise<Uint8Array> {
-  const r = await fetch(url);
+/** Hosts a shared (hosted) server must never fetch on an agent's behalf. Mirrors the API gateway. */
+export function privateHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, "");
+  if (h === "localhost" || h.endsWith(".localhost") || h.endsWith(".local") || h.endsWith(".internal") || h === "metadata.google.internal") return true;
+  if (h.includes(":")) return true; // IPv6 literals are not accepted
+  const m = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(h);
+  if (!m) return false;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+}
+
+/**
+ * Fetch a URL into memory. `allowPrivate` is true only on a local server, where
+ * the agent already has the person's network; the hosted server refuses
+ * private and link-local hosts, before and after redirects.
+ */
+async function fetchBytes(url: string, max = 200 * 1_048_576, allowPrivate = false): Promise<Uint8Array> {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    throw new Error(`Not a valid URL: ${url}`);
+  }
+  if (u.protocol !== "https:" && u.protocol !== "http:") throw new Error("Only http and https URLs are fetched.");
+  if (!allowPrivate && privateHost(u.hostname)) throw new Error("URLs pointing at private or local hosts are not fetched by the hosted server. Use base64 or run the MCP server locally.");
+  const r = await fetch(u, { redirect: "follow", signal: AbortSignal.timeout(60_000) });
+  if (!allowPrivate && privateHost(new URL(r.url || u.href).hostname)) throw new Error("The URL redirected to a private host.");
   if (!r.ok) throw new Error(`Could not fetch ${url}: ${r.status}`);
+  const declared = Number(r.headers.get("content-length") ?? 0);
+  if (declared > max) throw new Error(`Fetched file exceeds the size limit (${Math.round(max / 1_048_576)} MB).`);
   const buf = new Uint8Array(await r.arrayBuffer());
-  if (buf.byteLength > max) throw new Error("Fetched file exceeds the size limit.");
+  if (buf.byteLength > max) throw new Error(`Fetched file exceeds the size limit (${Math.round(max / 1_048_576)} MB).`);
+  if (!buf.byteLength) throw new Error("The URL returned an empty file.");
   return buf;
 }
 
-function decodeInput(input: { url?: string; base64?: string }): Promise<Uint8Array> {
-  if (input.base64) return Promise.resolve(new Uint8Array(Buffer.from(input.base64, "base64")));
-  if (input.url) return fetchBytes(input.url);
+function decodeInput(input: { url?: string; base64?: string }, allowPrivate: boolean): Promise<Uint8Array> {
+  if (input.base64) {
+    const bytes = new Uint8Array(Buffer.from(input.base64, "base64"));
+    if (!bytes.byteLength) return Promise.reject(new Error("`base64` decoded to zero bytes."));
+    return Promise.resolve(bytes);
+  }
+  if (input.url) return fetchBytes(input.url, undefined, allowPrivate);
   throw new Error("Provide `url` or `base64`.");
 }
 
@@ -95,7 +164,7 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
   // ── Platform ──────────────────────────────────────────────────────────────
   server.registerTool(
     "vybz_whoami",
-    { title: "Who am I", description: "Show the organization, plan, key name, and scopes behind the configured API key." },
+    { title: "Who am I", description: "Show the organization, plan, key name, and scopes behind the configured API key. Call this first when a later tool answers `insufficient_scope`.", annotations: READ },
     async () => run(() => client.me()),
   );
 
@@ -114,23 +183,25 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
         title: z.string().max(200).optional(),
         external_ref: z.string().max(200).optional().describe("Your own id for this recording"),
       },
+      annotations: open(WRITE_IDEMPOTENT),
     },
     async (a) =>
       run(async () => {
-        const bytes = fs && a.file ? new Uint8Array(await readFile(guard(opts.roots, a.file))) : await decodeInput(a);
+        if (!fs && a.file) throw new Error("The hosted server has no filesystem. Pass `url` or `base64`, or run `npx @vybz/mcp-server` locally.");
+        const bytes = fs && a.file ? new Uint8Array(await readFile(guard(opts.roots, a.file))) : await decodeInput(a, fs);
         return client.registerAsset(bytes, { title: a.title, externalRef: a.external_ref });
       }),
   );
 
   server.registerTool(
     "provenance_list_assets",
-    { title: "List assets", description: "List registered provenance assets, newest first.", inputSchema: { limit: z.number().int().min(1).max(200).optional() } },
+    { title: "List assets", description: "List registered provenance assets, newest first.", inputSchema: { limit: z.number().int().min(1).max(200).optional() }, annotations: READ },
     async (a) => run(() => client.listAssets(a.limit ?? 50)),
   );
 
   server.registerTool(
     "provenance_get_asset",
-    { title: "Get asset", description: "Fetch one asset with its issuance count.", inputSchema: { asset_id: z.string().uuid() } },
+    { title: "Get asset", description: "Fetch one asset with its issuance count.", inputSchema: { asset_id: z.string().uuid() }, annotations: READ },
     async (a) => run(() => client.getAsset(a.asset_id)),
   );
 
@@ -139,7 +210,7 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
     {
       title: "Issue a watermarked copy",
       description:
-        "Create a uniquely watermarked copy of an asset for a recipient. Returns the issuance record and a one-hour download link" +
+        "Create a uniquely watermarked copy of an asset for a recipient. Every call creates a new issuance with a new watermark, even for the same recipient, and counts against the plan's issuances. Returns the issuance record and a one-hour download link" +
         (fs ? ", or writes the WAV to `output_file` when given." : "."),
       inputSchema: {
         asset_id: z.string().uuid(),
@@ -148,9 +219,11 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
         c2pa: z.boolean().optional().describe("Attach Content Credentials when the deployment supports it (default true)"),
         output_file: z.string().optional().describe(fs ? "Local path to write the delivered WAV" : "Unavailable in hosted mode"),
       },
+      annotations: WRITE,
     },
     async (a) =>
       run(async () => {
+        if (!fs && a.output_file) throw new Error("The hosted server cannot write files. Omit `output_file` to receive a download link.");
         if (fs && a.output_file) {
           const out = guard(opts.roots, a.output_file);
           const buf = await client.issueBytes(a.asset_id, { recipient: a.recipient, license: a.license, c2pa: a.c2pa });
@@ -164,13 +237,13 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
 
   server.registerTool(
     "provenance_list_issuances",
-    { title: "List issuances", description: "Every copy issued for an asset, with recipients and watermark ids.", inputSchema: { asset_id: z.string().uuid() } },
+    { title: "List issuances", description: "Every copy issued for an asset, with recipients and watermark ids.", inputSchema: { asset_id: z.string().uuid() }, annotations: READ },
     async (a) => run(() => client.listIssuances(a.asset_id)),
   );
 
   server.registerTool(
     "provenance_ledger",
-    { title: "Asset ledger", description: "Hash-chained event history for an asset (register, issue, c2pa, verify, detect).", inputSchema: { asset_id: z.string().uuid() } },
+    { title: "Asset ledger", description: "Hash-chained event history for an asset (register, issue, c2pa, verify, detect).", inputSchema: { asset_id: z.string().uuid() }, annotations: READ },
     async (a) => run(() => client.ledger(a.asset_id)),
   );
 
@@ -207,9 +280,11 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
         FORMATS + " Verification is free; `attribute: true` runs watermark attribution on the identified asset and is metered as one detection per file. Batches of up to 25 return one result per file.",
       inputSchema: {
         ...inputSchema,
-        attribute: z.boolean().optional().describe("Run watermark attribution when an original is identified (metered)."),
+        attribute: z.boolean().optional().describe("Run watermark attribution when an original is identified (metered as one detection per file; requires the provenance:detect scope)."),
         asset_id: z.string().uuid().optional().describe("Test the watermark against this asset when the file cannot be identified by fingerprint."),
       },
+      // Free and non-mutating without `attribute`; with it, each file is metered like provenance_detect.
+      annotations: open(READ),
     },
     async (a) =>
       run(async () => {
@@ -229,6 +304,7 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
         "Blind watermark correlation of suspect audio against every copy issued for an asset. Returns ranked candidates and the attributed recipient when decisive. " +
         FORMATS + " The suspect is decoded and resampled automatically. Metered as one detection per file; batches of up to 25 return one result per file. If you do not know the asset, call provenance_verify first: its fingerprint step identifies it.",
       inputSchema: { asset_id: z.string().uuid(), ...inputSchema },
+      annotations: open(METERED),
     },
     async (a) =>
       run(async () => {
@@ -241,7 +317,7 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
 
   server.registerTool(
     "provenance_formats",
-    { title: "Supported formats", description: "Which input formats this deployment decodes, which need the decode worker, and the size and batch limits." },
+    { title: "Supported formats", description: "Which input formats this deployment decodes, which need the decode worker, and the size and batch limits.", annotations: READ },
     async () => run(() => client.formats()),
   );
 
@@ -249,42 +325,53 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
   const EVENTS = ["asset.registered", "issuance.created", "detection.completed", "detection.attributed", "commit.created", "ping", "*"] as const;
   server.registerTool(
     "webhooks_list",
-    { title: "List webhooks", description: "Endpoints the organization has registered for events, and the event names available." },
+    { title: "List webhooks", description: "Endpoints the organization has registered for events, and the event names available.", annotations: READ },
     async () => run(() => client.listWebhooks()),
   );
   server.registerTool(
     "webhooks_create",
     {
       title: "Create a webhook",
-      description: "Register an https endpoint for events. Returns the signing secret once; the agent should hand it to whoever runs the receiver. Deliveries carry X-VYBZ-Signature: t=<unix>,v1=<hex HMAC-SHA256(secret, t + '.' + body)>.",
+      description: "Register an https endpoint for events. Returns the signing secret once; the agent should hand it to whoever runs the receiver. Deliveries carry X-VYBZ-Signature: t=<unix>,v1=<hex HMAC-SHA256(secret, t + '.' + body)>. Up to 20 endpoints per organization.",
       inputSchema: { url: z.string().url(), events: z.array(z.enum(EVENTS)).optional().describe("Defaults to all events"), description: z.string().max(200).optional() },
+      annotations: open(WRITE),
     },
     async (a) => run(() => client.createWebhook({ url: a.url, events: a.events, description: a.description })),
   );
   server.registerTool(
     "webhooks_update",
-    { title: "Update a webhook", description: "Change url, events, description, or active; `rotate_secret` issues a new secret.", inputSchema: { id: z.string().uuid(), url: z.string().url().optional(), events: z.array(z.enum(EVENTS)).optional(), description: z.string().max(200).optional(), active: z.boolean().optional(), rotate_secret: z.boolean().optional() } },
+    {
+      title: "Update a webhook",
+      description: "Change url, events, description, or active; `rotate_secret` issues a new secret and invalidates the old one.",
+      inputSchema: { id: z.string().uuid(), url: z.string().url().optional(), events: z.array(z.enum(EVENTS)).optional(), description: z.string().max(200).optional(), active: z.boolean().optional(), rotate_secret: z.boolean().optional() },
+      annotations: open(WRITE_IDEMPOTENT),
+    },
     async (a) => run(() => client.updateWebhook(a.id, { url: a.url, events: a.events, description: a.description, active: a.active, rotate_secret: a.rotate_secret })),
   );
   server.registerTool(
     "webhooks_delete",
-    { title: "Delete a webhook", inputSchema: { id: z.string().uuid() } },
+    { title: "Delete a webhook", description: "Remove an endpoint and its delivery log. Deliveries stop immediately; this cannot be undone.", inputSchema: { id: z.string().uuid() }, annotations: DESTRUCTIVE },
     async (a) => run(() => client.deleteWebhook(a.id)),
   );
   server.registerTool(
     "webhooks_test",
-    { title: "Send a test event", description: "Queues a `ping` delivery to the endpoint and dispatches it.", inputSchema: { id: z.string().uuid() } },
+    { title: "Send a test event", description: "Queues a `ping` delivery to the endpoint and dispatches it. Read the result with webhook_deliveries.", inputSchema: { id: z.string().uuid() }, annotations: open(WRITE) },
     async (a) => run(() => client.testWebhook(a.id)),
   );
   server.registerTool(
     "webhook_deliveries",
-    { title: "Webhook deliveries", description: "Recent deliveries for an endpoint with status, attempts, and the last error. Retry one with `retry_delivery_id`.", inputSchema: { id: z.string().uuid(), status: z.enum(["pending", "sending", "delivered", "failed"]).optional(), limit: z.number().int().min(1).max(200).optional(), retry_delivery_id: z.string().uuid().optional() } },
+    {
+      title: "Webhook deliveries",
+      description: "Recent deliveries for an endpoint with status, attempts, and the last error. Retry one with `retry_delivery_id` (that re-sends to the customer's endpoint).",
+      inputSchema: { id: z.string().uuid(), status: z.enum(["pending", "sending", "delivered", "failed"]).optional(), limit: z.number().int().min(1).max(200).optional(), retry_delivery_id: z.string().uuid().optional() },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
     async (a) => run(() => (a.retry_delivery_id ? client.retryDelivery(a.id, a.retry_delivery_id) : client.webhookDeliveries(a.id, a.status, a.limit ?? 50))),
   );
 
   server.registerTool(
     "provenance_chain_verify",
-    { title: "Verify ledger chain", description: "Recompute the organization's entire hash chain and report the first broken link, if any." },
+    { title: "Verify ledger chain", description: "Recompute the organization's entire hash chain and report the first broken link, if any.", annotations: READ },
     async () => run(() => client.chain()),
   );
 
@@ -295,45 +382,52 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
       title: "Create repository",
       description: "Create a content-addressed repository for a DAW project or sample library.",
       inputSchema: { name: z.string().min(1).max(120), slug: z.string().optional(), description: z.string().optional(), daw: z.string().optional().describe("ableton, fl-studio, logic, pro-tools, cubase, reaper, bitwig, other") },
+      annotations: WRITE,
     },
-    async (a) => run(() => client.createRepo(a)),
+    async (a) => run(() => client.createRepo({ name: a.name, slug: a.slug, description: a.description, daw: a.daw })),
   );
 
-  server.registerTool("vault_list_repos", { title: "List repositories", description: "All repositories in the organization." }, async () => run(() => client.listRepos()));
+  server.registerTool("vault_list_repos", { title: "List repositories", description: "All repositories in the organization.", annotations: READ }, async () => run(() => client.listRepos()));
 
   server.registerTool(
     "vault_get_repo",
-    { title: "Get repository", description: "Repository with branches and commit count.", inputSchema: { repo: z.string().describe("Repo id or slug") } },
+    { title: "Get repository", description: "Repository with branches and commit count.", inputSchema: { repo: z.string().describe("Repo id or slug") }, annotations: READ },
     async (a) => run(() => client.getRepo(a.repo)),
   );
 
   server.registerTool(
     "vault_history",
-    { title: "Commit history", description: "Commits reachable from a ref, newest first.", inputSchema: { repo: z.string(), ref: z.string().optional().describe("Branch or sha"), limit: z.number().int().min(1).max(500).optional() } },
+    { title: "Commit history", description: "Commits reachable from a ref, newest first.", inputSchema: { repo: z.string(), ref: z.string().optional().describe("Branch or sha"), limit: z.number().int().min(1).max(500).optional() }, annotations: READ },
     async (a) => run(() => client.history(a.repo, a.ref, a.limit ?? 50)),
   );
 
   server.registerTool(
+    "vault_get_commit",
+    { title: "Get commit", description: "One commit with its complete tree (path, hash, size for every file).", inputSchema: { repo: z.string(), sha: z.string().regex(/^[a-f0-9]{64}$/i).describe("Commit sha") }, annotations: READ },
+    async (a) => run(() => client.commitDetail(a.repo, a.sha.toLowerCase())),
+  );
+
+  server.registerTool(
     "vault_tree",
-    { title: "Tree at ref", description: "Full file list (path, hash, size) at a branch or commit.", inputSchema: { repo: z.string(), ref: z.string().optional() } },
+    { title: "Tree at ref", description: "Full file list (path, hash, size) at a branch or commit.", inputSchema: { repo: z.string(), ref: z.string().optional() }, annotations: READ },
     async (a) => run(() => client.tree(a.repo, a.ref)),
   );
 
   server.registerTool(
     "vault_diff",
-    { title: "Diff refs", description: "Added, removed, and modified paths between two refs.", inputSchema: { repo: z.string(), from: z.string(), to: z.string() } },
+    { title: "Diff refs", description: "Added, removed, and modified paths between two refs.", inputSchema: { repo: z.string(), from: z.string(), to: z.string() }, annotations: READ },
     async (a) => run(() => client.diff(a.repo, a.from, a.to)),
   );
 
   server.registerTool(
     "vault_branches",
-    { title: "Branches", description: "List branches and their heads.", inputSchema: { repo: z.string() } },
+    { title: "Branches", description: "List branches and their heads.", inputSchema: { repo: z.string() }, annotations: READ },
     async (a) => run(() => client.branches(a.repo)),
   );
 
   server.registerTool(
     "vault_create_branch",
-    { title: "Create branch", description: "Create a branch from another branch or a commit.", inputSchema: { repo: z.string(), name: z.string(), from: z.string().optional() } },
+    { title: "Create branch", description: "Create a branch from another branch or a commit.", inputSchema: { repo: z.string(), name: z.string(), from: z.string().optional() }, annotations: WRITE },
     async (a) => run(() => client.createBranch(a.repo, a.name, a.from)),
   );
 
@@ -341,7 +435,7 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
     "vault_commit_entries",
     {
       title: "Commit a tree (entries)",
-      description: "Commit an explicit tree. Every hash must already be uploaded (use vault_blob_exists / vault_upload_blob). Pass `parent` to require a specific head.",
+      description: "Commit an explicit tree. Every hash must already be uploaded (use vault_blob_exists / vault_upload_blob). Pass `parent` to require a specific head; a `head_moved` error carries the current `head` in details. An identical tree returns the head with `unchanged: true`.",
       inputSchema: {
         repo: z.string(),
         branch: z.string().optional(),
@@ -350,13 +444,14 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
         parent: z.string().nullable().optional(),
         meta: z.record(z.unknown()).optional(),
       },
+      annotations: WRITE_IDEMPOTENT,
     },
-    async (a) => run(() => client.commit(a.repo, a)),
+    async (a) => run(() => client.commit(a.repo, { branch: a.branch, message: a.message, entries: a.entries, parent: a.parent, meta: a.meta })),
   );
 
   server.registerTool(
     "vault_blob_exists",
-    { title: "Check blobs", description: "Which of these SHA-256 hashes are already stored for the organization.", inputSchema: { repo: z.string(), hashes: z.array(z.string()).max(5000) } },
+    { title: "Check blobs", description: "Which of these SHA-256 hashes are already stored for the organization.", inputSchema: { repo: z.string(), hashes: z.array(z.string()).max(5000) }, annotations: READ },
     async (a) => run(() => client.blobsExist(a.repo, a.hashes)),
   );
 
@@ -364,19 +459,21 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
     "vault_upload_blob",
     {
       title: "Upload blob",
-      description: "Upload one file's bytes as a content-addressed blob. " + (fs ? "Provide `file`, `url`, or `base64`." : "Provide `url` or `base64`."),
+      description: "Upload one file's bytes as a content-addressed blob. Identical bytes are deduplicated across the organization. " + (fs ? "Provide `file`, `url`, or `base64`." : "Provide `url` or `base64`."),
       inputSchema: { repo: z.string(), file: z.string().optional(), url: z.string().url().optional(), base64: z.string().optional(), mime: z.string().optional() },
+      annotations: open(WRITE_IDEMPOTENT),
     },
     async (a) =>
       run(async () => {
-        const bytes = fs && a.file ? new Uint8Array(await readFile(guard(opts.roots, a.file))) : await decodeInput(a);
+        if (!fs && a.file) throw new Error("The hosted server has no filesystem. Pass `url` or `base64`, or run `npx @vybz/mcp-server` locally.");
+        const bytes = fs && a.file ? new Uint8Array(await readFile(guard(opts.roots, a.file))) : await decodeInput(a, fs);
         return client.uploadBlob(a.repo, bytes, a.mime);
       }),
   );
 
   server.registerTool(
     "vault_blob_link",
-    { title: "Blob download link", description: "Mint a 15-minute download link for a blob by hash.", inputSchema: { repo: z.string(), hash: z.string().regex(/^[a-f0-9]{64}$/) } },
+    { title: "Blob download link", description: "Mint a 15-minute download link for a blob by hash.", inputSchema: { repo: z.string(), hash: z.string().regex(/^[a-f0-9]{64}$/) }, annotations: READ },
     async (a) => run(() => client.blobLink(a.repo, a.hash)),
   );
 
@@ -397,6 +494,7 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
         meta: z.record(z.unknown()).optional().describe("daw, version, tempo, key, plugins…"),
         dry_run: z.boolean().optional().describe("Only report what would be uploaded"),
       },
+      annotations: WRITE_IDEMPOTENT,
     },
     async (a) =>
       run(async () => {
@@ -437,8 +535,9 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
     "vault_restore",
     {
       title: "Restore a tree to a folder",
-      description: "Download every file of a ref into a local folder, recreating the project layout. Existing files with the same hash are left untouched.",
+      description: "Download every file of a ref into a local folder, recreating the project layout. Existing files with the same hash are left untouched; files whose content differs are overwritten.",
       inputSchema: { repo: z.string(), ref: z.string().optional(), folder: z.string().describe("Destination folder") },
+      annotations: DESTRUCTIVE,
     },
     async (a) =>
       run(async () => {
@@ -452,7 +551,7 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
             if (sha256(cur) === e.hash) { skipped++; continue; }
           } catch { /* missing */ }
           const link = await client.blobLink(a.repo, e.hash);
-          const bytes = await fetchBytes(link.download.url, 2 * 1024 * 1_048_576);
+          const bytes = await fetchBytes(link.download.url, 2 * 1024 * 1_048_576, true);
           await mkdir(dirname(out), { recursive: true });
           await writeFile(out, bytes);
           written++;
@@ -467,6 +566,7 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
       title: "Local folder status",
       description: "Compare a local folder with a ref without uploading anything: which files are new, changed, or deleted relative to the repository.",
       inputSchema: { repo: z.string(), folder: z.string(), ref: z.string().optional() },
+      annotations: READ,
     },
     async (a) =>
       run(async () => {

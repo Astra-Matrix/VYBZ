@@ -59,14 +59,39 @@ Give it `https://vybz.cloud/v1/openapi.json` and `https://vybz.cloud/llms.txt`. 
 | `provenance_chain_verify` | `provenance:read` | Recompute the organization chain. |
 | `webhooks_list`, `webhooks_create`, `webhooks_update`, `webhooks_delete`, `webhooks_test`, `webhook_deliveries` | `org:read` / `webhooks:manage` | Signed event delivery to https endpoints; deliveries with status and retry. |
 | `vault_create_repo`, `vault_list_repos`, `vault_get_repo` | `vault:*` | Repositories. |
-| `vault_history`, `vault_tree`, `vault_diff`, `vault_branches`, `vault_create_branch` | `vault:read` / `vault:write` | Read and shape the graph. |
+| `vault_history`, `vault_get_commit`, `vault_tree`, `vault_diff`, `vault_branches`, `vault_create_branch` | `vault:read` / `vault:write` | Read and shape the graph. |
 | `vault_blob_exists`, `vault_upload_blob`, `vault_blob_link` | `vault:read` / `vault:write` | Blob-level operations. |
 | `vault_commit_entries` | `vault:write` | Commit an explicit tree. |
 | `vault_commit_folder` (local) | `vault:write` | Hash a folder, upload only missing bytes, commit. `dry_run` reports first. |
 | `vault_status` (local) | `vault:read` | Added / modified / deleted relative to a ref. |
-| `vault_restore` (local) | `vault:read` | Materialize a ref into a folder; unchanged files untouched. |
+| `vault_restore` (local) | `vault:read` | Materialize a ref into a folder; unchanged files untouched, changed files overwritten. |
 
-Each tool returns compact JSON. Errors return `{ error, message, status, request_id }` with `isError: true`.
+### Results and errors
+
+Each tool returns compact JSON. Errors return `isError: true` with:
+
+```json
+{ "error": "insufficient_scope", "message": "This key lacks the `vault:write` scope.", "status": 403, "request_id": "…", "details": { "required_scope": "vault:write" } }
+```
+
+`error` and `status` are the API's code and HTTP status. `details` carries the API's extra fields when there are any, so an agent can act on the cause: `required_scope` (403), `missing` and `missing_count` for `missing_blobs`, `head` and `expected` for `head_moved`, `plan`, `used`, `included`, `upgrade` for `plan_limit_reached`, `supported` for `unsupported_audio`, `retry_after_seconds` for `rate_limited`, `computed` for `checksum_mismatch`. Failures inside the server (an unreadable path, a URL that will not fetch) use `error: "tool_error"` and no status. Arguments that fail the tool's schema are rejected by the MCP layer before any API call.
+
+### Annotations
+
+Every tool declares the standard MCP annotations so a host can decide what to auto-approve:
+
+| Annotation | Meaning here | Examples |
+|---|---|---|
+| `readOnlyHint: true` | Changes nothing the organization owns and costs nothing. | `vybz_whoami`, every list/get/tree/diff, `vault_status`, `provenance_verify` |
+| `idempotentHint: false` | Repeating the call creates another record or another charge. | `provenance_issue` (new watermark each time), `provenance_detect` (metered per file), `vault_create_repo` |
+| `destructiveHint: true` | Deletes or overwrites. | `webhooks_delete`, `vault_restore` |
+| `openWorldHint: true` | Reaches outside VYBZ: fetches a URL you gave it, or contacts a customer endpoint. | `provenance_register` with `url`, `provenance_verify`, `provenance_detect`, `vault_upload_blob`, `webhooks_*` |
+
+`provenance_verify` is read-only and free by default; with `attribute: true` each file is metered as one detection, exactly like `provenance_detect`. Hosts that auto-approve read-only tools should treat that flag as the boundary.
+
+### Hosted server limits
+
+The hosted server has no filesystem: `file`, `files`, and `output_file` are refused with a message naming the alternatives. URLs it fetches itself (`provenance_register`, `vault_upload_blob`) must be `http` or `https` on public hosts; private, loopback, link-local, and `.internal` addresses are refused before and after redirects. URLs passed to `provenance_verify` and `provenance_detect` are forwarded to the API, which applies the same rule. Fetched files are capped at 200 MB.
 
 ## Recommended prompts
 
@@ -82,8 +107,8 @@ Each tool returns compact JSON. Errors return `{ error, message, status, request
 
 - An agent can only act inside the organization of its key, within the key's scopes and rate limit.
 - Revoking the key in the console stops the agent immediately.
-- Every tool call appears in the audit log with the agent's user-agent string.
-- Local filesystem tools refuse paths outside `VYBZ_ROOTS`.
+- Every tool call appears in the audit log with the agent's user-agent string. Through the hosted endpoint it reads `vybz-mcp-hosted/1.1 (<the connecting client's user agent>)`, so Claude Code, Cursor, and a custom client are distinguishable in the log; through the local server it reads `vybz-mcp-local/1.1`.
+- Local filesystem tools refuse paths outside `VYBZ_ROOTS` (case-insensitively on Windows).
 - The MCP server never prints the key, and the hosted endpoint never persists it.
 
 ## Building your own integration

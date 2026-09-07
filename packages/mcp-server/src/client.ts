@@ -16,13 +16,24 @@ export class VybzApiError extends Error {
   status: number;
   code: string;
   requestId?: string;
-  constructor(status: number, code: string, message: string, requestId?: string) {
+  /**
+   * Extra fields the API attached to the error: `required_scope`, `missing`
+   * (blobs), `head` / `expected` (branch), `plan` / `used` / `included` /
+   * `upgrade`, `supported` (formats), `retry_after_seconds`, `computed` (hash).
+   * Surfaced to agents so they can act on the cause, not only the message.
+   */
+  details?: Record<string, unknown>;
+  constructor(status: number, code: string, message: string, requestId?: string, details?: Record<string, unknown>) {
     super(message);
     this.status = status;
     this.code = code;
     this.requestId = requestId;
+    this.details = details;
   }
 }
+
+/** Reserved keys of the API error envelope; everything else is a detail. */
+const ENVELOPE_KEYS = new Set(["code", "message", "request_id", "docs"]);
 
 export function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
@@ -56,7 +67,7 @@ export class VybzClient {
     }
     this.key = opts.apiKey;
     this.base = (opts.base ?? DEFAULT_BASE).replace(/\/+$/, "");
-    this.ua = opts.userAgent ?? "vybz-mcp/1.0";
+    this.ua = opts.userAgent ?? "vybz-mcp/1.1";
   }
 
   private async call<T>(method: string, path: string, init: { json?: unknown; body?: Uint8Array; form?: FormData; headers?: Record<string, string>; accept?: string } = {}): Promise<T> {
@@ -82,12 +93,20 @@ export class VybzClient {
     if (!res.ok) {
       let code = "http_error";
       let message = `${res.status} ${res.statusText}`;
+      let details: Record<string, unknown> | undefined;
+      let requestId = rid;
       if (ct.includes("application/json")) {
-        const j = (await res.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null;
-        code = j?.error?.code ?? code;
-        message = j?.error?.message ?? message;
+        const j = (await res.json().catch(() => null)) as { error?: Record<string, unknown> } | null;
+        const e = j?.error;
+        if (e && typeof e === "object") {
+          if (typeof e.code === "string") code = e.code;
+          if (typeof e.message === "string") message = e.message;
+          if (typeof e.request_id === "string") requestId = requestId ?? e.request_id;
+          const rest = Object.fromEntries(Object.entries(e).filter(([k]) => !ENVELOPE_KEYS.has(k)));
+          if (Object.keys(rest).length) details = rest;
+        }
       }
-      throw new VybzApiError(res.status, code, message, rid);
+      throw new VybzApiError(res.status, code, message, requestId, details);
     }
     if (ct.includes("application/json")) return (await res.json()) as T;
     return (await res.arrayBuffer()) as unknown as T;

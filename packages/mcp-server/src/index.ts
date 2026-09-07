@@ -22,11 +22,11 @@ if (!apiKey) {
   process.exit(2);
 }
 
-const client = new VybzClient({ apiKey, base: process.env.VYBZ_API_BASE, userAgent: "vybz-mcp-local/1.0" });
+const client = new VybzClient({ apiKey, base: process.env.VYBZ_API_BASE, userAgent: "vybz-mcp-local/1.1" });
 const roots = (process.env.VYBZ_ROOTS ?? "").split(delimiter).map((s) => s.trim()).filter(Boolean);
 
 const server = new McpServer(
-  { name: "vybz", version: "1.0.0" },
+  { name: "vybz", version: "1.1.0" },
   {
     instructions:
       "VYBZ gives you two capabilities for audio businesses. Provenance: register originals, issue per-recipient watermarked copies, verify files, and attribute leaks. Vault: content-addressed version control for DAW projects (commit folders, restore, diff). All actions are scoped to the organization behind the API key and are audited. Prefer vault_commit_folder for snapshots and provenance_detect when asked who leaked a file.",

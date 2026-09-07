@@ -3,30 +3,51 @@
 > Audio infrastructure for businesses. Provenance (forensic watermarking, C2PA Content Credentials, verification, leak attribution) and Vault (content-addressed version control for DAW projects), behind one organization API key. Built for humans in a console and for AI agents over MCP.
 
 Base URL: https://vybz.cloud/v1
-Auth: `Authorization: Bearer vybz_live_<48 hex>` (create keys at https://vybz.cloud/console)
+Auth: `Authorization: Bearer vybz_live_<48 hex>` or `X-API-Key` (create keys at https://vybz.cloud/console)
 OpenAPI 3.1: https://vybz.cloud/v1/openapi.json
-Hosted MCP: https://vybz.cloud/api/mcp (Streamable HTTP, same bearer key)
-Local MCP: `npx -y @vybz/mcp-server` with env VYBZ_API_KEY (adds folder commit/status/restore tools)
+Hosted MCP: https://vybz.cloud/api/mcp (Streamable HTTP, stateless, same bearer key; files as URLs or base64)
+Local MCP: `npx -y @vybz/mcp-server` with env VYBZ_API_KEY and optional VYBZ_ROOTS (adds vault_commit_folder, vault_status, vault_restore)
+Full documentation in one file: https://vybz.cloud/llms-full.txt
+
+## Conventions
+- Every response carries X-Request-Id and X-VYBZ-Api-Version. Errors are JSON {error:{code, message, request_id, docs, ...extra}}.
+- Rate limit per key per minute: X-RateLimit-Remaining on success, 429 rate_limited with Retry-After: 60.
+- Binary in: raw request body, or one multipart/form-data file part. Batch routes: many parts, or JSON {items:[{url, name?}]} of public https URLs (25 per call, 200 MB total).
+- Audio in: verify and detect accept WAV, AIFF, FLAC, MP3, Ogg Vorbis, Opus in the edge and AAC/M4A, ALAC, MP4, MOV, WebM through the decode worker; GET /provenance/formats reports the live list and limits. Registration accepts lossless only (WAV, AIFF, FLAC).
+- Limits: audio 200 MB, blobs 500 MB. Analysis decodes about six minutes per file at 44.1 kHz and reports truncated beyond that.
 
 ## Provenance
-- POST /provenance/assets — body: raw PCM WAV; headers X-VYBZ-Title, X-VYBZ-External-Ref. Returns asset {id, sha256}. Idempotent on identical bytes.
-- POST /provenance/assets/{id}/issue — JSON {recipient, license?, store?, c2pa?}. Returns watermarked WAV bytes (or JSON with a 1h download link when Accept: application/json). Headers X-VYBZ-Issuance-Id, X-VYBZ-Watermark-Id, X-VYBZ-C2PA.
-- POST /provenance/assets/{id}/detect — body: suspect WAV. Returns {attributed, confidence: exact|high|medium|none, matches[]}.
-- POST /provenance/verify — body: any file bytes. Returns {known, kind: original|issued_copy|unknown, asset, issuance}.
-- GET /provenance/assets, /provenance/assets/{id}, /provenance/assets/{id}/issuances, /provenance/assets/{id}/ledger, /provenance/chain
+- POST /provenance/assets [provenance:write] — body: lossless original. Headers X-VYBZ-Title, X-VYBZ-External-Ref, optional X-VYBZ-Content-SHA256. Returns asset {id, sha256, pcm_sha256, source_format, fingerprint_frames, sample_rate, channels, duration_sec}. 201 new, 200 existed:true for identical bytes. 422 lossless_required for lossy input.
+- POST /provenance/assets/{id}/issue [provenance:write] — JSON {recipient, license?, store?, c2pa?}. Each call is a new issuance with a new watermark. Returns watermarked WAV bytes, or JSON with a one-hour download link when Accept: application/json or store:true. Headers X-VYBZ-Issuance-Id, X-VYBZ-Watermark-Id, X-VYBZ-C2PA, X-VYBZ-SHA256.
+- POST /provenance/verify?attribute=&asset= [provenance:read] — body: any file. Runs every method and reports each as evidence: exact_hash, pcm_hash, fingerprint (identifies the original and the offset without an id), content_credentials, and with attribute=true the watermark (metered as one detection, needs provenance:detect). Returns {verdict: original|issued_copy|derived_copy|derived_unattributed|unknown, confidence: exact|high|medium|none, input, asset, issuance, evidence[], hint}.
+- POST /provenance/verify/batch [provenance:read] — 25 files or URLs, one verification per item plus a summary by verdict.
+- POST /provenance/assets/{id}/detect [provenance:detect] — body: suspect file in any format; decoded and resampled to the asset. Returns {attributed: {issuance_id, recipient, watermark_id, score, exact} | null, confidence, statistics: {z, ratio}, matches[], candidates}. Metered.
+- POST /provenance/assets/{id}/detect/batch [provenance:detect] — 25 files or URLs, one detection per item.
+- GET /provenance/formats [no scope] — decodable formats, worker availability, limits, methods.
+- GET /provenance/assets, /provenance/assets/{id}, /provenance/assets/{id}/issuances, /provenance/assets/{id}/ledger, /provenance/chain [provenance:read]
+
+## Webhooks
+- Events: asset.registered, issuance.created, detection.completed, detection.attributed, commit.created, ping. Body {id, object:"event", event, created_at, org_id, data}. Signed: X-VYBZ-Signature "t=<unix>,v1=<hex HMAC-SHA256(secret, t + '.' + body)>"; also X-VYBZ-Event, X-VYBZ-Delivery, X-VYBZ-Attempt. Retries at 1m, 5m, 30m, 2h, 12h, then failed.
+- POST /webhooks [webhooks:manage] — {url (https, public host), events?, description?}. Returns the endpoint and its secret once. 20 endpoints per organization.
+- GET /webhooks, GET /webhooks/{id}, GET /webhooks/{id}/deliveries?status=&limit= [org:read]
+- PATCH /webhooks/{id} ({url?, events?, description?, active?, rotate_secret?}), DELETE /webhooks/{id}, POST /webhooks/{id}/test, POST /webhooks/{id}/deliveries/{delivery}/retry [webhooks:manage]
 
 ## Vault
-- POST /vault/repos — {name, slug?, description?, daw?}
-- POST /vault/repos/{repo}/blobs/exists — {hashes[]} → {present[], missing[]}
-- POST /vault/repos/{repo}/blobs — raw bytes; header X-VYBZ-Content-SHA256 optional. Deduplicated per organization.
-- POST /vault/repos/{repo}/commits — {branch?, message?, entries:[{path,hash,size}], parent?, meta?}. 409 head_moved on conflict; unchanged:true when tree identical.
-- GET /vault/repos, /vault/repos/{repo}, /vault/repos/{repo}/commits?ref=, /vault/repos/{repo}/commits/{sha}, /vault/repos/{repo}/tree?ref=, /vault/repos/{repo}/diff?from=&to=, /vault/repos/{repo}/branches, /vault/repos/{repo}/blobs/{hash}
+- POST /vault/repos [vault:write] — {name, slug?, description?, daw?, default_branch?}. 409 slug_taken.
+- POST /vault/repos/{repo}/blobs/exists [vault:read] — {hashes[]} (5000 max) → {present[], missing[]}
+- POST /vault/repos/{repo}/blobs [vault:write] — raw bytes; headers X-VYBZ-Content-SHA256 (rejected on mismatch), X-VYBZ-Mime. Deduplicated per organization. Returns {hash, size, existed}.
+- POST /vault/repos/{repo}/commits [vault:write] — {branch?, message?, entries:[{path, hash, size}] (the complete tree), parent?, meta?}. 409 missing_blobs (lists missing), 409 head_moved (carries head) when parent does not match; unchanged:true when the tree equals the head.
+- GET /vault/repos, /vault/repos/{repo}, /vault/repos/{repo}/commits?ref=&limit=, /vault/repos/{repo}/commits/{sha}, /vault/repos/{repo}/tree?ref=, /vault/repos/{repo}/diff?from=&to=, /vault/repos/{repo}/branches, /vault/repos/{repo}/blobs/{hash} (15-minute link) [vault:read]
+- POST /vault/repos/{repo}/branches [vault:write] — {name, from?}
 
 ## Scopes
-org:read, provenance:read, provenance:write, provenance:detect, vault:read, vault:write
+org:read, provenance:read, provenance:write, provenance:detect, vault:read, vault:write, webhooks:manage. A key holds any subset; 403 insufficient_scope names the required_scope.
 
 ## Errors
-JSON {error:{code, message, request_id, docs}}. 401 unauthenticated/invalid_key, 403 insufficient_scope, 409 head_moved/missing_blobs/checksum_mismatch, 413 payload_too_large, 422 validation, 429 rate_limited (Retry-After: 60).
+401 unauthenticated/invalid_key, 402 plan_limit_reached (plan, used, included, upgrade), 403 insufficient_scope (required_scope), 404 not_found, 409 head_moved/missing_blobs/checksum_mismatch/slug_taken/branch_exists, 413 payload_too_large, 415 unsupported_media_type, 422 unsupported_audio/lossless_required/invalid_url/url_not_allowed/fetch_failed/too_many_items and other validation codes, 429 rate_limited (Retry-After: 60), 503 not_configured.
+
+## MCP tools
+vybz_whoami; provenance_register, provenance_list_assets, provenance_get_asset, provenance_issue, provenance_list_issuances, provenance_ledger, provenance_verify, provenance_detect, provenance_formats, provenance_chain_verify; webhooks_list, webhooks_create, webhooks_update, webhooks_delete, webhooks_test, webhook_deliveries; vault_create_repo, vault_list_repos, vault_get_repo, vault_history, vault_get_commit, vault_tree, vault_diff, vault_branches, vault_create_branch, vault_commit_entries, vault_blob_exists, vault_upload_blob, vault_blob_link; local only: vault_commit_folder, vault_status, vault_restore. Every tool carries readOnlyHint, destructiveHint, idempotentHint, openWorldHint. Errors return {error, message, status, request_id, details} with isError:true.
 
 ## Docs
 - https://vybz.cloud/docs/quickstart
