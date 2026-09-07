@@ -25,6 +25,7 @@ export function openapiDocument(base: string) {
     { name: "asset", in: "query", schema: { type: "string" }, description: "Asset id to test the watermark against when the file cannot be identified by fingerprint." },
   ];
   const idParam = (name: string, desc: string) => ({ name, in: "path", required: true, schema: { type: "string" }, description: desc });
+  const nameHeader = { name: "X-VYBZ-Name", in: "header", schema: { type: "string" }, description: "Display name echoed back as `name` when the file is sent as a raw body. Multipart parts use their filename." };
 
   return {
     openapi: "3.1.0",
@@ -86,7 +87,7 @@ export function openapiDocument(base: string) {
         post: {
           tags: ["Provenance"], summary: "Attribute a suspect file",
           description: "Blind, alignment-tolerant correlation of the suspect audio against every copy issued for this asset. Accepts any supported format (see `/provenance/formats`); the suspect is decoded and resampled to the asset's rate. Returns ranked candidates and, when the evidence is decisive, the attributed issuance. Metered as one detection.",
-          parameters: [idParam("id", "Asset id")],
+          parameters: [idParam("id", "Asset id"), nameHeader],
           requestBody: audioBody("Suspect audio in any supported format, raw or as one multipart part."),
           responses: { "200": jsonOf("Detection"), "422": err("Undecodable or unsupported audio"), "402": err("Plan limit reached") },
         },
@@ -105,7 +106,7 @@ export function openapiDocument(base: string) {
           tags: ["Provenance"], summary: "Verify a file",
           description:
             "Establishes what a file is using every method available, each reported as evidence: exact byte hash, canonical PCM hash (same audio in any lossless container), perceptual fingerprint (which original it derives from and at what offset, without an asset id), Content Credentials presence cross-checked against the record, and, with `attribute=true`, watermark attribution on the identified asset. Any supported format. Verification is free; attribution is metered.",
-          parameters: attributeParams,
+          parameters: [...attributeParams, nameHeader],
           requestBody: audioBody("Any file, raw or as one multipart part. Non-audio bytes are checked by exact hash only."),
           responses: { "200": jsonOf("Verification"), "413": err("Too large") },
         },

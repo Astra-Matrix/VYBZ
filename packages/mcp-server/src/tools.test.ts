@@ -179,15 +179,36 @@ describe("hosted mode input handling", () => {
   });
 
   it("forwards URLs for verify and detect to the API's batch route with the options as query", async () => {
-    const { client, calls } = fakeClient({ verifyUrls: { data: [], summary: {} }, detectUrls: { data: [], summary: {} } });
+    const { client, calls } = fakeClient({ verifyUrls: { data: [], summary: {} }, detectUrls: { data: [{ status: "ok", attributed: null }], summary: {} } });
     const { call, close } = await connect(client, { filesystem: false });
-    await call("provenance_verify", { urls: ["https://cdn.example.com/a.mp3", "https://cdn.example.com/b.mp3"], attribute: true, asset_id: UUID });
-    await call("provenance_detect", { asset_id: UUID, url: "https://cdn.example.com/leak.mp3" });
+    const batch = await call("provenance_verify", { urls: ["https://cdn.example.com/a.mp3", "https://cdn.example.com/b.mp3"], attribute: true, asset_id: UUID });
+    const single = await call("provenance_detect", { asset_id: UUID, url: "https://cdn.example.com/leak.mp3" });
     expect(calls[0]).toEqual({
       method: "verifyUrls",
       args: [[{ url: "https://cdn.example.com/a.mp3", name: "https://cdn.example.com/a.mp3" }, { url: "https://cdn.example.com/b.mp3", name: "https://cdn.example.com/b.mp3" }], { attribute: true, asset: UUID }],
     });
     expect(calls[1]).toEqual({ method: "detectUrls", args: [UUID, [{ url: "https://cdn.example.com/leak.mp3", name: "https://cdn.example.com/leak.mp3" }]] });
+    expect(batch.body).toEqual({ data: [], summary: {} });
+    expect(single.body).toEqual({ attributed: null });
+    await close();
+  });
+
+  it("unwraps a single url to the single-file shape, and a failed item to a tool error with its details", async () => {
+    const { client } = fakeClient({
+      verifyUrls: (items: Array<{ url: string }>) =>
+        items[0].url.endsWith("bad.txt")
+          ? { data: [{ name: items[0].url, status: "error", error: { code: "unsupported_audio", message: "Not audio.", supported: ["wav", "mp3"] } }], summary: { total: 1, errors: 1 } }
+          : { data: [{ status: "ok", verdict: "original", evidence: [] }], summary: { total: 1, original: 1 } },
+    });
+    const { call, close } = await connect(client, { filesystem: false });
+    const good = await call("provenance_verify", { url: "https://cdn.example.com/master.flac" });
+    expect(good.isError).toBe(false);
+    expect(good.body).toEqual({ verdict: "original", evidence: [] });
+    const bad = await call("provenance_verify", { url: "https://cdn.example.com/bad.txt" });
+    expect(bad.isError).toBe(true);
+    expect(bad.body).toEqual({ error: "unsupported_audio", message: "Not audio.", details: { supported: ["wav", "mp3"] } });
+    const list = await call("provenance_verify", { urls: ["https://cdn.example.com/master.flac"] });
+    expect(list.body).toEqual({ data: [{ status: "ok", verdict: "original", evidence: [] }], summary: { total: 1, original: 1 } });
     await close();
   });
 

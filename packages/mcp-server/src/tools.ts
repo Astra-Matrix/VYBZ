@@ -38,14 +38,43 @@ function ok(data: unknown): ToolResult {
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
 }
 
+/** A per-item failure from a batch route, surfaced as the tool's error when the batch had one item. */
+class ItemError extends Error {
+  code: string;
+  details?: Record<string, unknown>;
+  constructor(code: string, message: string, details?: Record<string, unknown>) {
+    super(message);
+    this.code = code;
+    this.details = details;
+  }
+}
+
 function fail(e: unknown): ToolResult {
   let body: ToolError;
   if (e instanceof VybzApiError) {
     body = { error: e.code, message: e.message, status: e.status, request_id: e.requestId, ...(e.details ? { details: e.details } : {}) };
+  } else if (e instanceof ItemError) {
+    body = { error: e.code, message: e.message, ...(e.details ? { details: e.details } : {}) };
   } else {
     body = { error: "tool_error", message: e instanceof Error ? e.message : String(e) };
   }
   return { isError: true, content: [{ type: "text", text: JSON.stringify(body) }] };
+}
+
+/**
+ * A single URL is sent through the batch route (the only route that fetches).
+ * Return the one result in the same shape a single file gets, so the tool's
+ * output does not depend on how the file was supplied.
+ */
+function unwrapSingle(r: { data: Record<string, unknown>[] }): Record<string, unknown> {
+  const item = r.data?.[0];
+  if (!item) throw new ItemError("no_result", "The API returned no result for the URL.");
+  if (item.status === "error") {
+    const { code, message, ...rest } = (item.error ?? {}) as { code?: string; message?: string } & Record<string, unknown>;
+    throw new ItemError(code ?? "item_error", message ?? "The URL could not be processed.", Object.keys(rest).length ? rest : undefined);
+  }
+  const { status: _status, ...rest } = item;
+  return rest;
 }
 
 // ── Annotations ───────────────────────────────────────────────────────────────
@@ -251,8 +280,8 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
   const inputSchema = {
     file: z.string().optional().describe(fs ? "Local file path" : "Not available on the hosted server"),
     files: z.array(z.string()).max(25).optional().describe(fs ? "Local file paths for a batch (up to 25)" : "Not available on the hosted server"),
-    url: z.string().url().optional().describe("Public URL to fetch"),
-    urls: z.array(z.string().url()).max(25).optional().describe("Public URLs to fetch as a batch (up to 25)"),
+    url: z.string().url().optional().describe("Public URL to fetch. Returns one result, the same shape as a single file."),
+    urls: z.array(z.string().url()).max(25).optional().describe("Public URLs to fetch as a batch (up to 25). Returns { data[], summary } even for one URL."),
     base64: z.string().optional().describe("Raw file bytes, base64"),
   };
 
@@ -290,6 +319,7 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
       run(async () => {
         const { files, urls } = await gather(a);
         const vo = { attribute: a.attribute, asset: a.asset_id };
+        if (urls.length === 1 && !a.urls?.length) return unwrapSingle(await client.verifyUrls(urls, vo));
         if (urls.length) return client.verifyUrls(urls, vo);
         if (files.length === 1) return client.verify(files[0].bytes, { ...vo, name: files[0].name });
         return client.verifyBatch(files, vo);
@@ -309,6 +339,7 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
     async (a) =>
       run(async () => {
         const { files, urls } = await gather(a);
+        if (urls.length === 1 && !a.urls?.length) return unwrapSingle(await client.detectUrls(a.asset_id, urls));
         if (urls.length) return client.detectUrls(a.asset_id, urls);
         if (files.length === 1) return client.detect(a.asset_id, files[0].bytes, files[0].name);
         return client.detectBatch(a.asset_id, files);

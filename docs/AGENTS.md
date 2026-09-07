@@ -89,6 +89,10 @@ Every tool declares the standard MCP annotations so a host can decide what to au
 
 `provenance_verify` is read-only and free by default; with `attribute: true` each file is metered as one detection, exactly like `provenance_detect`. Hosts that auto-approve read-only tools should treat that flag as the boundary.
 
+### One file, one result
+
+`provenance_verify` and `provenance_detect` return the same shape however the file arrived: `file`, `url`, or `base64` give one verification or detection; `files` or `urls` give `{ data[], summary }` with one entry per file, even for a single entry. A `url` the API could not fetch or decode is reported as the tool's error with the API's code and details, not buried in a list.
+
 ### Hosted server limits
 
 The hosted server has no filesystem: `file`, `files`, and `output_file` are refused with a message naming the alternatives. URLs it fetches itself (`provenance_register`, `vault_upload_blob`) must be `http` or `https` on public hosts; private, loopback, link-local, and `.internal` addresses are refused before and after redirects. URLs passed to `provenance_verify` and `provenance_detect` are forwarded to the API, which applies the same rule. Fetched files are capped at 200 MB.
