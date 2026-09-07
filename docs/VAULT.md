@@ -44,6 +44,10 @@ Storage is billed on unique bytes per organization. A sample library shared by e
 
 `meta` is free-form JSON on the commit. Recommended keys: `daw`, `daw_version`, `bpm`, `key`, `sample_rate`, `plugins[]`, `author`. The console and agents surface these in history.
 
+## Console
+
+`/console/vault` lists the organization's repositories and creates new ones. A repository page shows branches, the commit history of the selected branch with file counts, sizes, and commit metadata, the complete file list at any commit with per-file downloads, and the changes each commit made against its parent. Branches can be created from any commit. In browsers that support directory access (Chrome and Edge), **Restore to folder** writes a commit's files into a folder on the machine, creating subfolders as needed. Everything the console shows comes from the same `/vault` routes the API and MCP tools use.
+
 ## What Vault is not
 
 - Not a merge tool. Binary session files cannot be merged; branches exist so alternatives can coexist and be diffed by file.
@@ -55,4 +59,4 @@ Storage is billed on unique bytes per organization. A sample library shared by e
 - 500 MB per blob request; larger files should be split by the client or delivered by chunked upload (roadmap).
 - 20,000 entries per commit. 5,000 hashes per `exists` call.
 
-Last updated: 2026-09-05
+Last updated: 2026-09-07
