@@ -23,7 +23,7 @@
 import { admin, CORS, json, callerId } from "../_shared/edge.ts";
 import { secret } from "../_shared/secrets.ts";
 import { paddle, PADDLE_ENV, PaddleError } from "../_shared/paddle.ts";
-import { PADDLE_PRICES, PLAN_RANK, isPaidPlan, planById, type Interval, type PaidPlanId } from "../_shared/plans.ts";
+import { PADDLE_PRICES, PADDLE_PRODUCTS, PLANS, PLAN_RANK, isPaidPlan, planById, type Interval, type PaidPlanId } from "../_shared/plans.ts";
 
 async function provider(): Promise<"paddle" | "stripe"> {
   const p = (await secret("BILLING_PROVIDER")).toLowerCase();
@@ -69,13 +69,40 @@ async function ensurePaddleCustomer(orgId: string, email: string | null): Promis
   return customer.id;
 }
 
-async function paddleCheckout(orgId: string, email: string | null, origin: string, sel: { plan: PaidPlanId; interval: Interval; priceId: string }) {
+/** One trial per person and per organization: a later subscription starts paid, on a copy of the price without the trial. */
+async function trialEligible(orgId: string, uid: string): Promise<boolean> {
+  const [{ data: used }, { data: b }] = await Promise.all([
+    admin.rpc("billing_trial_used", { p_user: uid }),
+    admin.from("org_billing").select("paddle_subscription_id,stripe_subscription_id").eq("org_id", orgId).maybeSingle(),
+  ]);
+  return used !== true && !b?.paddle_subscription_id && !b?.stripe_subscription_id;
+}
+
+async function paddleCheckout(orgId: string, uid: string, email: string | null, origin: string, sel: { plan: PaidPlanId; interval: Interval; priceId: string }) {
   const customer = await ensurePaddleCustomer(orgId, email);
+  const trial = await trialEligible(orgId, uid);
+  const plan = PLANS.find((p) => p.id === sel.plan)!;
+  const item = trial
+    ? { price_id: sel.priceId, quantity: 1 }
+    : {
+        quantity: 1,
+        price: {
+          description: `${plan.name}, ${sel.interval}ly`,
+          name: `${plan.name} (${sel.interval}ly)`,
+          product_id: PADDLE_PRODUCTS[PADDLE_ENV][sel.plan],
+          unit_price: { amount: String(plan.price![sel.interval]), currency_code: "USD" },
+          billing_cycle: { interval: sel.interval, frequency: 1 },
+          trial_period: null,
+          tax_mode: "account_setting",
+          quantity: { minimum: 1, maximum: 1 },
+          custom_data: { vybz_plan: sel.plan, interval: sel.interval },
+        },
+      };
   const body: Record<string, unknown> = {
-    items: [{ price_id: sel.priceId, quantity: 1 }],
+    items: [item],
     customer_id: customer,
     collection_mode: "automatic",
-    custom_data: { kind: "org_plan", org_id: orgId, plan: sel.plan, interval: sel.interval },
+    custom_data: { kind: "org_plan", org_id: orgId, plan: sel.plan, interval: sel.interval, user_id: uid, trial: trial ? "yes" : "no" },
   };
   let tx: { id: string; checkout?: { url?: string | null } | null };
   try {
@@ -84,7 +111,7 @@ async function paddleCheckout(orgId: string, email: string | null, origin: strin
     if (!(e instanceof PaddleError) || e.status !== 400) throw e;
     tx = await paddle("POST", "/transactions", body);
   }
-  return { provider: "paddle", transaction_id: tx.id, url: tx.checkout?.url ?? null, plan: sel.plan, interval: sel.interval };
+  return { provider: "paddle", transaction_id: tx.id, url: tx.checkout?.url ?? null, plan: sel.plan, interval: sel.interval, trial };
 }
 
 /**
@@ -209,6 +236,7 @@ Deno.serve(async (req: Request) => {
           ? { status: billing.status, current_period_end: billing.current_period_end, provider: billing.provider, subscription_id: subscriptionId, stripe_subscription_id: billing.stripe_subscription_id ?? null }
           : { status: "none", provider: prov, subscription_id: null, stripe_subscription_id: null },
         usage: u ?? null,
+        trial_eligible: prov === "paddle" ? await trialEligible(orgId, uid) : false,
         price_configured: true,
         paddle: prov === "paddle" ? { client_token: await secret("PADDLE_CLIENT_TOKEN"), environment: PADDLE_ENV } : null,
       });
@@ -222,7 +250,7 @@ Deno.serve(async (req: Request) => {
       if (prov !== "paddle") return json({ error: "Plan changes for this organization are handled in the Stripe portal." }, 400);
       return json(await paddleChange(orgId, parseSelection(body)));
     }
-    return json(prov === "paddle" ? await paddleCheckout(orgId, email, origin, parseSelection(body)) : await stripeCheckout(orgId, email, origin));
+    return json(prov === "paddle" ? await paddleCheckout(orgId, uid, email, origin, parseSelection(body)) : await stripeCheckout(orgId, email, origin));
   } catch (e) {
     return json({ error: (e as Error).message ?? "billing error" }, 400);
   }

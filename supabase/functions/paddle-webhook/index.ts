@@ -36,7 +36,7 @@ async function applySubscription(sub: PaddleSubscription, forcedStatus?: string)
   if (!orgId) { console.error("paddle webhook: no organization for subscription", sub.id, sub.customer_id); return; }
   const status = mapStatus(forcedStatus ?? sub.status);
   // The price on the subscription is the truth after plan changes; custom_data is what checkout started with.
-  const fromPrice = sub.items?.map((i) => (i.price?.id ? planForPrice(i.price.id) : undefined)).find(Boolean);
+  const fromPrice = sub.items?.map((i) => (i.price?.id ? planForPrice(i.price.id) : undefined) ?? (typeof i.price?.custom_data?.vybz_plan === "string" ? String(i.price.custom_data.vybz_plan) : undefined)).find(Boolean);
   const plan = fromPrice ?? (typeof sub.custom_data?.plan === "string" ? String(sub.custom_data.plan) : "ultimate");
   const { error } = await admin.rpc("billing_apply_paddle", {
     p_org: orgId,
@@ -47,6 +47,9 @@ async function applySubscription(sub: PaddleSubscription, forcedStatus?: string)
     p_plan: KEEPS_PLAN.has(status) ? plan : "developer",
   });
   if (error) console.error("billing_apply_paddle", error.message);
+  if (status === "trialing" && typeof sub.custom_data?.user_id === "string") {
+    await admin.rpc("billing_trial_record", { p_user: sub.custom_data.user_id, p_org: orgId, p_plan: plan });
+  }
 }
 
 Deno.serve(async (req: Request) => {

@@ -213,7 +213,7 @@ export async function memberRemove(orgId: string, userId: string): Promise<void>
 // ── Billing ─────────────────────────────────────────────────────────────────
 export type PlanUsage = {
   plan: string; issuances_month: number; detections_month: number; storage_bytes: number;
-  limit_issuances: number; limit_detections: number; limit_storage: number; hard_cap: boolean;
+  limit_issuances: number; limit_detections: number; limit_storage: number; hard_cap: boolean; trial?: boolean;
 };
 export type BillingStatus = {
   provider: "paddle" | "stripe";
@@ -221,6 +221,7 @@ export type BillingStatus = {
   billing: { status: string; current_period_end?: string | null; provider?: string; subscription_id?: string | null; stripe_subscription_id?: string | null };
   usage: PlanUsage | null;
   price_configured: boolean;
+  trial_eligible?: boolean;
   paddle: { client_token: string; environment: "sandbox" | "live" } | null;
 };
 export type CheckoutStart = { provider: "paddle" | "stripe"; url: string | null; transaction_id?: string; plan?: string; interval?: string };

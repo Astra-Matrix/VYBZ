@@ -87,6 +87,15 @@ export const PADDLE_PRICES: Record<PaddleEnv, Record<PaidPlanId, Record<Interval
   },
 };
 
+/** Paddle product ids per environment and plan, for non-catalog prices (a subscription without the trial). */
+export const PADDLE_PRODUCTS: Record<PaddleEnv, Record<PaidPlanId, string>> = {
+  sandbox: { creator: "pro_01m1yyrtj0wahjs5tt7jq0sn4d", pro: "pro_01m1yyrvamncc751q2j868h4cr", ultimate: "pro_01m1yyrwsggetx39dyzvx9h428" },
+  live: { creator: "pro_01m1yyrxsn112a50kx8n3kvs10", pro: "pro_01m1yyryhmpc78b9e7wa5zcayq", ultimate: "pro_01m1yyrza4s41q8j82jybnrr4n" },
+};
+
+/** Caps that apply to every plan while its subscription is trialing. Mirrors trial_limits() in the database. */
+export const TRIAL_LIMITS = { issuances: 25, detections: 10, storageBytes: 10 * GB, days: 14 };
+
 /** Legacy prices that map to a plan, so subscriptions created before the ladder keep resolving. */
 const LEGACY_PRICES: Record<string, PlanId> = {
   pri_01m1ybdqphgqerhccne3my186b: "ultimate", // sandbox Business, monthly

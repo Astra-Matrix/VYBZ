@@ -340,7 +340,7 @@ export function PricingPage() {
           })}
         </div>
         <p className="vz-muted" style={{ fontSize: 12.5, marginTop: 18 }}>
-          Every paid plan starts with a 14-day trial; a card is taken at checkout and charged when the trial ends unless you cancel. Sold by Paddle as merchant of record; tax is added at checkout. Metered overages on Pro and Ultimate are billed monthly with the renewal. Watermark detection counts one call per suspect file regardless of candidates.
+          Every paid plan starts with a 14-day trial, one per person; a card is taken at checkout and charged when the trial ends unless you cancel. During the trial each plan is limited to 25 issuances, 10 detections, and 10 GB, with full quantities from the first paid period. Sold by Paddle as merchant of record; tax is added at checkout. Metered overages on Pro and Ultimate are billed monthly with the renewal. Watermark detection counts one call per suspect file regardless of candidates.
         </p>
       </section>
     </SiteShell>

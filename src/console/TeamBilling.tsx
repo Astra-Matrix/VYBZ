@@ -2,7 +2,7 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Copy, Check, ShieldCheck, ArrowUpRight } from "lucide-react";
 import { useSession } from "@/store/session";
-import { PLANS, PLAN_RANK, formatUsd, planById } from "../../supabase/functions/_shared/plans.ts";
+import { PLANS, PLAN_RANK, TRIAL_LIMITS, formatUsd, planById } from "../../supabase/functions/_shared/plans.ts";
 import {
   type BillingStatus,
   type InviteRow,
@@ -290,7 +290,7 @@ export function BillingPage({ org, onChanged }: { org: Org; onChanged: () => voi
       {err ? <div className="vz-alert err" style={{ marginBottom: 14 }}>{err}</div> : null}
       {trialing && st?.billing?.current_period_end ? (
         <div className="vz-alert info" style={{ marginBottom: 14 }}>
-          Your 14-day trial ends {fmtDate(st.billing.current_period_end)}. The card on file is charged then unless you cancel from Manage subscription first. Paddle emails a reminder before the trial ends.
+          Your 14-day trial ends {fmtDate(st.billing.current_period_end)}. The card on file is charged then unless you cancel from Manage subscription first; Paddle emails a reminder before that. During the trial every plan is limited to {TRIAL_LIMITS.issuances} issuances, {TRIAL_LIMITS.detections} detections, and {fmtBytes(TRIAL_LIMITS.storageBytes)}; the plan's full quantities unlock when the trial converts.
         </div>
       ) : null}
 
@@ -337,7 +337,7 @@ export function BillingPage({ org, onChanged }: { org: Org; onChanged: () => voi
             {PLANS.filter((p) => p.price).map((p) => {
               const isCurrent = current?.id === p.id;
               const up = rank(p.id) > rank(plan);
-              const label = isCurrent ? "Current plan" : hasSub ? (up ? "Upgrade" : "Downgrade") : `Start ${p.trialDays}-day trial`;
+              const label = isCurrent ? "Current plan" : hasSub ? (up ? "Upgrade" : "Downgrade") : st?.trial_eligible === false ? "Subscribe" : `Start ${p.trialDays}-day trial`;
               return (
                 <div key={p.id} className={`vz-card ${p.featured ? "vz-card-accent" : ""}`}>
                   <h4 className="vz-h3" style={{ marginBottom: 4 }}>{p.name}</h4>
@@ -353,13 +353,13 @@ export function BillingPage({ org, onChanged }: { org: Org; onChanged: () => voi
               );
             })}
           </div>
-          {!hasSub ? <p className="vz-muted" style={{ fontSize: 12.5, marginBottom: 16 }}>Trials take a card and convert to the paid plan when they end unless cancelled. Downgrades apply at the next renewal; upgrades apply immediately and are prorated.</p> : null}
+          {!hasSub ? <p className="vz-muted" style={{ fontSize: 12.5, marginBottom: 16 }}>{st?.trial_eligible === false ? "This account has already used its trial, so the subscription starts paid today." : `Trials take a card and convert to the paid plan when they end unless cancelled. One trial per person; during it every plan is limited to ${TRIAL_LIMITS.issuances} issuances, ${TRIAL_LIMITS.detections} detections, and ${fmtBytes(TRIAL_LIMITS.storageBytes)}.`} Downgrades apply at the next renewal; upgrades apply immediately and are prorated.</p> : null}
         </>
       ) : null}
 
       {u ? (
         <div className="vz-grid vz-grid-3">
-          <Meter label="Issuances this month" used={Number(u.issuances_month)} limit={Number(u.limit_issuances)} />
+          <Meter label={u.trial ? "Issuances this month (trial cap)" : "Issuances this month"} used={Number(u.issuances_month)} limit={Number(u.limit_issuances)} />
           <Meter label="Detections this month" used={Number(u.detections_month)} limit={Number(u.limit_detections)} />
           <Meter label="Stored bytes" used={Number(u.storage_bytes)} limit={Number(u.limit_storage)} fmt={fmtBytes} />
         </div>

@@ -58,7 +58,7 @@ Every capability is an MCP tool. Hosted at `https://vybz.cloud/api/mcp` for zero
 | Ultimate | $245 / month, $2,450 / year | Unlimited members, 3 TB Vault, 10,000 issuances and 2,000 detections per month, then metered; CA-issued Content Credentials certificate; 99.9% SLA. |
 | Enterprise | Custom | Volume pricing, dedicated signing certificate, private deployment, SSO, retention controls, named support. |
 
-Every paid plan starts with a 14-day trial: a card is taken at checkout and charged when the trial ends unless the subscription is cancelled first.
+Every paid plan starts with a 14-day trial: a card is taken at checkout and charged when the trial ends unless the subscription is cancelled first. One trial per person. While trialing, every plan is capped at 25 issuances, 10 detections, and 10 GB with no overage; the plan's full quantities apply from the first paid period. Second subscriptions, from the same person or the same organization, start paid.
 
 Meters: issuances, detections, unique stored bytes. Reads are free. Developer and Creator limits are hard caps enforced by the API with `402 plan_limit_reached`; Pro, Ultimate, and Enterprise are metered beyond the included quantities and billed in arrears with the next renewal.
 

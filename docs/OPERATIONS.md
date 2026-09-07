@@ -146,6 +146,8 @@ While the key and the Vault values disagree, checkout fails and webhook signatur
 
 **Storage size limit.** Supabase enforces a project-wide file size limit on every object, single-request or chunked. On the free plan it is fixed at 50 MB, which is below the API's 200 MB audio, 500 MB blob, and 50 GB chunked limits; uploads above it fail with `storage_error` or `413`. On Pro the limit can be raised to 50 GB: `PATCH https://api.supabase.com/v1/projects/xixmneooyufbeftdfpcm/config/storage` with `{"fileSizeLimit": 53687091200}` and a personal access token, or Storage settings in the dashboard. Buckets have no limits of their own.
 
+**Trials.** `billing_trials` records the user account that started each trial; `billing-checkout` gives that person, or an organization that already had a subscription, a paid-from-day-one checkout on a non-catalog copy of the price. While `org_billing.status` is `trialing`, `org_plan_usage()` substitutes `trial_limits()` (25 issuances, 10 detections, 10 GB, hard cap) for the plan's quantities.
+
 **Chunked uploads.** Sessions live in `vault_uploads` and are pruned a day after expiry by the `vault-uploads-prune` cron job. Storage's resumable protocol wants 6 MB parts, which is what the gateway uses.
 
 **Rate bucket growth.** `select public.api_rate_buckets_prune();` on a daily schedule (Supabase cron).
