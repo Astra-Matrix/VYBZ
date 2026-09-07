@@ -13,6 +13,7 @@
 // idempotent and the function answers 200 for events it does not use.
 import { admin, json } from "../_shared/edge.ts";
 import { verifyPaddleSignature, mapStatus, type PaddleSubscription } from "../_shared/paddle.ts";
+import { planForPrice } from "../_shared/plans.ts";
 
 const KEEPS_PLAN = new Set(["active", "trialing", "past_due"]);
 
@@ -34,7 +35,9 @@ async function applySubscription(sub: PaddleSubscription, forcedStatus?: string)
   const orgId = await orgFor(sub);
   if (!orgId) { console.error("paddle webhook: no organization for subscription", sub.id, sub.customer_id); return; }
   const status = mapStatus(forcedStatus ?? sub.status);
-  const plan = typeof sub.custom_data?.plan === "string" ? String(sub.custom_data.plan) : "business";
+  // The price on the subscription is the truth after plan changes; custom_data is what checkout started with.
+  const fromPrice = sub.items?.map((i) => (i.price?.id ? planForPrice(i.price.id) : undefined)).find(Boolean);
+  const plan = fromPrice ?? (typeof sub.custom_data?.plan === "string" ? String(sub.custom_data.plan) : "ultimate");
   const { error } = await admin.rpc("billing_apply_paddle", {
     p_org: orgId,
     p_customer: sub.customer_id ?? null,

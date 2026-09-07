@@ -277,7 +277,7 @@ export function PricingPage() {
       await openCheckout(cfg, {
         priceId: t.priceId[interval],
         email,
-        customData: { kind: "org_plan", org_id: orgId, plan: "business", interval },
+        customData: { kind: "org_plan", org_id: orgId, plan: t.id, interval },
         successUrl: `${window.location.origin}/console/billing?checkout=success`,
       });
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
@@ -285,7 +285,7 @@ export function PricingPage() {
   }
 
   const shown = (t: Tier): { amount: string; per: string } => {
-    const per = t.priceId ? (interval === "month" ? "per month" : "per year") : t.name === "Developer" ? "forever" : "annual";
+    const per = t.priceId ? (interval === "month" ? "per month" : "per year") : t.id === "developer" ? "forever" : "annual";
     if (t.priceId && prices) {
       const p = prices.get(t.priceId[interval]);
       if (p) return { amount: p.total, per: `${per}, ${p.currencyCode}` };
@@ -310,7 +310,7 @@ export function PricingPage() {
         {err ? <p className="vz-alert err" style={{ marginTop: 10, display: "inline-block" }}>{err}</p> : null}
       </section>
       <section className="vz-section" style={{ borderTop: 0 }}>
-        <div className="vz-grid vz-grid-3">
+        <div className="vz-grid vz-grid-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
           {TIERS.map((t) => {
             const p = shown(t);
             return (
@@ -328,7 +328,7 @@ export function PricingPage() {
                 </ul>
                 {t.cta.checkout ? (
                   <button type="button" className="vz-btn vz-btn-primary" style={{ width: "100%" }} disabled={busy === t.name} onClick={() => void subscribe(t)}>
-                    {busy === t.name ? "Opening checkout…" : email ? "Subscribe" : "Sign in to subscribe"}
+                    {busy === t.name ? "Opening checkout…" : email ? `Start ${t.trialDays}-day trial` : "Sign in to start a trial"}
                   </button>
                 ) : t.cta.to.startsWith("mailto:") ? (
                   <a href={t.cta.to} className="vz-btn vz-btn-ghost" style={{ width: "100%" }}>{t.cta.label}</a>
@@ -340,7 +340,7 @@ export function PricingPage() {
           })}
         </div>
         <p className="vz-muted" style={{ fontSize: 12.5, marginTop: 18 }}>
-          Sold by Paddle as merchant of record; tax is added at checkout. Metered overages are billed monthly with the renewal. Watermark detection counts one call per suspect file regardless of candidates.
+          Every paid plan starts with a 14-day trial; a card is taken at checkout and charged when the trial ends unless you cancel. Sold by Paddle as merchant of record; tax is added at checkout. Metered overages on Pro and Ultimate are billed monthly with the renewal. Watermark detection counts one call per suspect file regardless of candidates.
         </p>
       </section>
     </SiteShell>

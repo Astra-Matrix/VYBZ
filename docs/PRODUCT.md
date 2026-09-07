@@ -52,11 +52,15 @@ Every capability is an MCP tool. Hosted at `https://vybz.cloud/api/mcp` for zero
 
 | Plan | Price | Includes |
 |---|---|---|
-| Developer | $0 | 1 org, 3 keys, 250 issuances and 50 detections per month, 10 GB Vault. |
-| Business | $249 / month, or $2,490 / year (two months free) | Unlimited keys and members; 10,000 issuances and 2,000 detections included, then metered; 1 TB Vault; CA-issued Content Credentials certificate; audit export; 99.9% SLA. |
+| Developer | $0 | 1 member, 3 keys, 100 issuances and 20 detections per month, 2 GB Vault. Hard limits. |
+| Creator | $9 / month, $90 / year | One member, 100 GB Vault, 200 issuances and 50 detections per month, Content Credentials. Hard limits. |
+| Pro | $85 / month, $850 / year | 5 members, 500 GB Vault, 1,500 issuances and 300 detections per month, then metered; webhooks, audit export. |
+| Ultimate | $245 / month, $2,450 / year | Unlimited members, 3 TB Vault, 10,000 issuances and 2,000 detections per month, then metered; CA-issued Content Credentials certificate; 99.9% SLA. |
 | Enterprise | Custom | Volume pricing, dedicated signing certificate, private deployment, SSO, retention controls, named support. |
 
-Meters: issuances, detections, unique stored bytes. Reads are free. Developer limits are hard caps enforced by the API with `402 plan_limit_reached`; Business and Enterprise are metered beyond the included quantities and billed in arrears with the next renewal.
+Every paid plan starts with a 14-day trial: a card is taken at checkout and charged when the trial ends unless the subscription is cancelled first.
+
+Meters: issuances, detections, unique stored bytes. Reads are free. Developer and Creator limits are hard caps enforced by the API with `402 plan_limit_reached`; Pro, Ultimate, and Enterprise are metered beyond the included quantities and billed in arrears with the next renewal.
 
 Paid plans are sold by Paddle as merchant of record: checkout, invoices, tax, and refunds happen there, and the subscription is managed from Console → Billing. Prices exclude tax, which Paddle adds at checkout for the billing address given.
 

@@ -3,21 +3,27 @@
 // Console → billing provider for organization plans. Paddle is the provider
 // (merchant of record); the Stripe path remains for organizations linked
 // before the switch and is selected by BILLING_PROVIDER=stripe.
-//   POST { action: "checkout", orgId, origin? }
-//        Paddle → { provider: "paddle", transaction_id, url }   open with Paddle.js (url when a default payment link exists)
-//        Stripe → { provider: "stripe", url }                   Stripe Checkout
-//   POST { action: "portal",   orgId, origin? } → { url }       customer portal
-//   POST { action: "status",   orgId }          → { plan, billing, usage, provider, paddle: { client_token, environment } }
+//   POST { action: "status",   orgId }
+//        → { plan, billing, usage, provider, paddle: { client_token, environment } }
+//   POST { action: "checkout", orgId, plan, interval, origin? }
+//        Paddle → { provider: "paddle", transaction_id, url }   new subscription; open with Paddle.js
+//        Stripe → { provider: "stripe", url }
+//   POST { action: "change",   orgId, plan, interval }
+//        Paddle → { provider: "paddle", changed: true, plan, interval }   existing subscription moved to another price
+//   POST { action: "portal",   orgId, origin? } → { url }
+//
+// `plan` is creator | pro | ultimate and `interval` is month | year; prices
+// come from _shared/plans.ts for the configured PADDLE_ENV. Every new
+// subscription starts with the 14-day trial carried by the price.
 //
 // Caller must be an org admin (Supabase JWT, self-verified). Deploy with
 // --no-verify-jwt. Secrets: BILLING_PROVIDER, PADDLE_API_KEY, PADDLE_ENV,
-// PADDLE_PRICE_BUSINESS, PADDLE_CLIENT_TOKEN (public, handed to the console);
-// STRIPE_SECRET_KEY, STRIPE_PRICE_BUSINESS for the Stripe path.
+// PADDLE_CLIENT_TOKEN (public, handed to the console); STRIPE_* for the
+// Stripe path.
 import { admin, CORS, json, callerId } from "../_shared/edge.ts";
 import { secret } from "../_shared/secrets.ts";
 import { paddle, PADDLE_ENV, PaddleError } from "../_shared/paddle.ts";
-
-const BUSINESS_CENTS = 24900;
+import { PADDLE_PRICES, PLAN_RANK, isPaidPlan, planById, type Interval, type PaidPlanId } from "../_shared/plans.ts";
 
 async function provider(): Promise<"paddle" | "stripe"> {
   const p = (await secret("BILLING_PROVIDER")).toLowerCase();
@@ -28,6 +34,13 @@ async function provider(): Promise<"paddle" | "stripe"> {
 async function isAdmin(orgId: string, uid: string): Promise<boolean> {
   const { data } = await admin.rpc("is_org_admin", { p_org: orgId, p_uid: uid });
   return data === true;
+}
+
+function parseSelection(body: Record<string, unknown>): { plan: PaidPlanId; interval: Interval; priceId: string } {
+  const plan = String(body.plan ?? "pro");
+  const interval = body.interval === "year" ? "year" : "month";
+  if (!isPaidPlan(plan)) throw new Error("`plan` must be creator, pro, or ultimate.");
+  return { plan, interval, priceId: PADDLE_PRICES[PADDLE_ENV][plan][interval] };
 }
 
 // ── Paddle ──────────────────────────────────────────────────────────────────
@@ -47,7 +60,6 @@ async function ensurePaddleCustomer(orgId: string, email: string | null): Promis
       custom_data: { vybz_org_id: orgId, vybz_org_slug: org?.slug ?? "" },
     });
   } catch (e) {
-    // The email may already belong to a Paddle customer (a second organization, or a retry).
     if (!(e instanceof PaddleError) || e.code !== "customer_already_exists") throw e;
     const found = await paddle<PaddleCustomer[]>("GET", `/customers?email=${encodeURIComponent(email)}&status=active`);
     if (!found?.length) throw e;
@@ -57,25 +69,46 @@ async function ensurePaddleCustomer(orgId: string, email: string | null): Promis
   return customer.id;
 }
 
-async function paddleCheckout(orgId: string, email: string | null, origin: string) {
-  const price = await secret("PADDLE_PRICE_BUSINESS");
-  if (!price) throw new Error("PADDLE_PRICE_BUSINESS is not configured.");
+async function paddleCheckout(orgId: string, email: string | null, origin: string, sel: { plan: PaidPlanId; interval: Interval; priceId: string }) {
   const customer = await ensurePaddleCustomer(orgId, email);
   const body: Record<string, unknown> = {
-    items: [{ price_id: price, quantity: 1 }],
+    items: [{ price_id: sel.priceId, quantity: 1 }],
     customer_id: customer,
     collection_mode: "automatic",
-    custom_data: { kind: "org_plan", org_id: orgId, plan: "business" },
+    custom_data: { kind: "org_plan", org_id: orgId, plan: sel.plan, interval: sel.interval },
   };
   let tx: { id: string; checkout?: { url?: string | null } | null };
   try {
     tx = await paddle("POST", "/transactions", { ...body, checkout: { url: `${origin}/console/billing` } });
   } catch (e) {
-    // The checkout URL must be on an approved domain; without one Paddle.js opens the transaction by id.
     if (!(e instanceof PaddleError) || e.status !== 400) throw e;
     tx = await paddle("POST", "/transactions", body);
   }
-  return { provider: "paddle", transaction_id: tx.id, url: tx.checkout?.url ?? null };
+  return { provider: "paddle", transaction_id: tx.id, url: tx.checkout?.url ?? null, plan: sel.plan, interval: sel.interval };
+}
+
+/**
+ * Move an existing subscription to another plan or interval. Upgrades are
+ * prorated and charged now; downgrades take effect at the next renewal with
+ * no refund, as the terms state. The webhook applies the plan when Paddle
+ * confirms the change.
+ */
+async function paddleChange(orgId: string, sel: { plan: PaidPlanId; interval: Interval; priceId: string }) {
+  const [{ data: b }, { data: org }] = await Promise.all([
+    admin.from("org_billing").select("paddle_subscription_id,status").eq("org_id", orgId).maybeSingle(),
+    admin.from("orgs").select("plan").eq("id", orgId).single(),
+  ]);
+  if (!b?.paddle_subscription_id || !["active", "trialing", "past_due"].includes(String(b.status))) {
+    throw new Error("There is no active subscription to change. Start one first.");
+  }
+  const currentRank = PLAN_RANK[(org?.plan ?? "developer") as keyof typeof PLAN_RANK] ?? 0;
+  const upgrade = PLAN_RANK[sel.plan] >= currentRank;
+  const sub = await paddle<{ status: string; items: Array<{ price: { id: string } }> }>("PATCH", `/subscriptions/${b.paddle_subscription_id}`, {
+    items: [{ price_id: sel.priceId, quantity: 1 }],
+    proration_billing_mode: b.status === "trialing" ? "do_not_bill" : upgrade ? "prorated_immediately" : "full_next_billing_period",
+    custom_data: { kind: "org_plan", org_id: orgId, plan: sel.plan, interval: sel.interval },
+  });
+  return { provider: "paddle", changed: true, plan: sel.plan, interval: sel.interval, status: sub.status, effective: upgrade || b.status === "trialing" ? "now" : "next_billing_period" };
 }
 
 async function paddlePortal(orgId: string, email: string | null) {
@@ -115,9 +148,9 @@ async function stripeCheckout(orgId: string, email: string | null, origin: strin
     : {
         price_data: {
           currency: "usd",
-          unit_amount: BUSINESS_CENTS,
+          unit_amount: 24500,
           recurring: { interval: "month" as const },
-          product_data: { name: "VYBZ Business", description: "Provenance and Vault. 10,000 issuances and 2,000 detections per month included, 1 TB Vault, Content Credentials, 99.9% SLA." },
+          product_data: { name: "VYBZ Ultimate", description: planById("ultimate")?.tagline ?? "" },
         },
         quantity: 1,
       };
@@ -128,8 +161,8 @@ async function stripeCheckout(orgId: string, email: string | null, origin: strin
     allow_promotion_codes: true,
     success_url: `${origin}/console/billing?checkout=success`,
     cancel_url: `${origin}/console/billing?checkout=cancel`,
-    subscription_data: { metadata: { kind: "org_plan", org_id: orgId, plan: "business" } },
-    metadata: { kind: "org_plan", org_id: orgId, plan: "business" },
+    subscription_data: { metadata: { kind: "org_plan", org_id: orgId, plan: "ultimate" } },
+    metadata: { kind: "org_plan", org_id: orgId, plan: "ultimate" },
   });
   return { provider: "stripe", url: session.url };
 }
@@ -149,7 +182,7 @@ Deno.serve(async (req: Request) => {
   const uid = await callerId(req);
   if (!uid) return json({ error: "unauthorized" }, 401);
 
-  const body = await req.json().catch(() => ({}));
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const orgId = String(body.orgId ?? "");
   const action = String(body.action ?? "checkout");
   if (!/^[0-9a-f-]{36}$/i.test(orgId)) return json({ error: "orgId required" }, 400);
@@ -169,7 +202,6 @@ Deno.serve(async (req: Request) => {
       ]);
       const u = Array.isArray(usage) ? usage[0] : usage;
       const subscriptionId = billing?.paddle_subscription_id ?? billing?.stripe_subscription_id ?? null;
-      const priceConfigured = prov === "paddle" ? Boolean(await secret("PADDLE_PRICE_BUSINESS")) : true;
       return json({
         provider: prov,
         plan: org?.plan ?? "developer",
@@ -177,7 +209,7 @@ Deno.serve(async (req: Request) => {
           ? { status: billing.status, current_period_end: billing.current_period_end, provider: billing.provider, subscription_id: subscriptionId, stripe_subscription_id: billing.stripe_subscription_id ?? null }
           : { status: "none", provider: prov, subscription_id: null, stripe_subscription_id: null },
         usage: u ?? null,
-        price_configured: priceConfigured,
+        price_configured: true,
         paddle: prov === "paddle" ? { client_token: await secret("PADDLE_CLIENT_TOKEN"), environment: PADDLE_ENV } : null,
       });
     }
@@ -186,7 +218,11 @@ Deno.serve(async (req: Request) => {
     const email = userRes?.user?.email ?? null;
 
     if (action === "portal") return json(prov === "paddle" ? await paddlePortal(orgId, email) : await stripePortal(orgId, email, origin));
-    return json(prov === "paddle" ? await paddleCheckout(orgId, email, origin) : await stripeCheckout(orgId, email, origin));
+    if (action === "change") {
+      if (prov !== "paddle") return json({ error: "Plan changes for this organization are handled in the Stripe portal." }, 400);
+      return json(await paddleChange(orgId, parseSelection(body)));
+    }
+    return json(prov === "paddle" ? await paddleCheckout(orgId, email, origin, parseSelection(body)) : await stripeCheckout(orgId, email, origin));
   } catch (e) {
     return json({ error: (e as Error).message ?? "billing error" }, 400);
   }

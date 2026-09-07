@@ -6,7 +6,8 @@
 import { openCheckout } from "@/lib/paddle";
 import { supabase, SUPABASE_URL } from "@/lib/supabase";
 
-export type Org = { id: string; name: string; slug: string; plan: "developer" | "business" | "enterprise"; created_at: string };
+export type PlanName = "developer" | "creator" | "pro" | "ultimate" | "enterprise" | "business";
+export type Org = { id: string; name: string; slug: string; plan: PlanName; created_at: string };
 export type ApiKeyRow = {
   id: string;
   name: string;
@@ -216,13 +217,14 @@ export type PlanUsage = {
 };
 export type BillingStatus = {
   provider: "paddle" | "stripe";
-  plan: "developer" | "business" | "enterprise";
+  plan: PlanName;
   billing: { status: string; current_period_end?: string | null; provider?: string; subscription_id?: string | null; stripe_subscription_id?: string | null };
   usage: PlanUsage | null;
   price_configured: boolean;
   paddle: { client_token: string; environment: "sandbox" | "live" } | null;
 };
-export type CheckoutStart = { provider: "paddle" | "stripe"; url: string | null; transaction_id?: string };
+export type CheckoutStart = { provider: "paddle" | "stripe"; url: string | null; transaction_id?: string; plan?: string; interval?: string };
+export type PlanChange = { provider: "paddle"; changed: boolean; plan: string; interval: string; status: string; effective: "now" | "next_billing_period" };
 
 /** Open the overlay for a transaction created by the checkout function. */
 export async function openPaddleCheckout(transactionId: string, cfg: { client_token: string; environment: "sandbox" | "live" }, successUrl: string): Promise<void> {
@@ -265,5 +267,6 @@ export function fmtMonth(s: string): string {
   return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(undefined, { month: "long", year: "numeric", timeZone: "UTC" });
 }
 export function billingStatus(orgId: string) { return billingCall<BillingStatus>({ action: "status", orgId }); }
-export function billingCheckout(orgId: string) { return billingCall<CheckoutStart>({ action: "checkout", orgId }); }
+export function billingCheckout(orgId: string, plan: string, interval: "month" | "year") { return billingCall<CheckoutStart>({ action: "checkout", orgId, plan, interval }); }
+export function billingChange(orgId: string, plan: string, interval: "month" | "year") { return billingCall<PlanChange>({ action: "change", orgId, plan, interval }); }
 export function billingPortal(orgId: string) { return billingCall<{ url: string }>({ action: "portal", orgId }); }

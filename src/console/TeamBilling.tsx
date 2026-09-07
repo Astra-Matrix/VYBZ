@@ -2,12 +2,14 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Copy, Check, ShieldCheck, ArrowUpRight } from "lucide-react";
 import { useSession } from "@/store/session";
+import { PLANS, PLAN_RANK, formatUsd, planById } from "../../supabase/functions/_shared/plans.ts";
 import {
   type BillingStatus,
   type InviteRow,
   type MemberRow,
   type Org,
   type UsageReportRow,
+  billingChange,
   billingCheckout,
   billingPortal,
   billingStatus,
@@ -246,10 +248,22 @@ export function BillingPage({ org, onChanged }: { org: Org; onChanged: () => voi
       window.location.assign(url);
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); setBusy(false); }
   }
-  async function upgrade() {
-    setBusy(true); setErr(null);
+  const [interval, setInterval] = useState<"month" | "year">("month");
+  const [changed, setChanged] = useState<string | null>(null);
+
+  async function subscribe(planId: string) {
+    setBusy(true); setErr(null); setChanged(null);
     try {
-      const start = await billingCheckout(org.id);
+      if (st?.billing?.subscription_id && st.billing.status !== "canceled" && st.billing.status !== "none") {
+        const r = await billingChange(org.id, planId, interval);
+        setChanged(r.effective === "now"
+          ? `Plan changed to ${planById(planId)?.name ?? planId}. It applies now; the console updates within a few seconds.`
+          : `Plan change to ${planById(planId)?.name ?? planId} is scheduled for the next renewal. You keep the current plan until then.`);
+        setTimeout(() => { void load(); onChanged(); }, 3000);
+        setBusy(false);
+        return;
+      }
+      const start = await billingCheckout(org.id, planId, interval);
       if (start.provider === "paddle" && start.transaction_id && st?.paddle?.client_token) {
         await openPaddleCheckout(start.transaction_id, st.paddle, `${window.location.origin}/console/billing?checkout=success`);
         setBusy(false);
@@ -260,32 +274,43 @@ export function BillingPage({ org, onChanged }: { org: Org; onChanged: () => voi
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); setBusy(false); }
   }
 
-  const plan = st?.plan ?? org.plan;
+  const plan = (st?.plan ?? org.plan) as string;
+  const current = planById(plan === "business" ? "ultimate" : plan);
   const u = st?.usage;
+  const status = st?.billing?.status ?? "none";
+  const trialing = status === "trialing";
+  const hasSub = Boolean(st?.billing?.subscription_id) && status !== "none" && status !== "canceled";
+  const rank = (id: string) => PLAN_RANK[(id === "business" ? "ultimate" : id) as keyof typeof PLAN_RANK] ?? 0;
   return (
     <>
       <Head title="Billing" sub="Plans meter issuances, detections, and unique stored bytes. Reads are free." />
-      {params.get("checkout") === "success" ? <div className="vz-alert ok" style={{ marginBottom: 14 }}>Payment received. Your plan updates within a few seconds.</div> : null}
+      {params.get("checkout") === "success" ? <div className="vz-alert ok" style={{ marginBottom: 14 }}>Subscription started. Your plan updates within a few seconds.</div> : null}
       {params.get("checkout") === "cancel" ? <div className="vz-alert info" style={{ marginBottom: 14 }}>Checkout cancelled. Nothing was charged.</div> : null}
+      {changed ? <div className="vz-alert ok" style={{ marginBottom: 14 }}>{changed}</div> : null}
       {err ? <div className="vz-alert err" style={{ marginBottom: 14 }}>{err}</div> : null}
+      {trialing && st?.billing?.current_period_end ? (
+        <div className="vz-alert info" style={{ marginBottom: 14 }}>
+          Your 14-day trial ends {fmtDate(st.billing.current_period_end)}. The card on file is charged then unless you cancel from Manage subscription first. Paddle emails a reminder before the trial ends.
+        </div>
+      ) : null}
 
       <div className="vz-grid vz-grid-2" style={{ marginBottom: 16 }}>
         <div className="vz-card vz-card-accent">
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <ShieldCheck size={18} style={{ color: "var(--vz-cyan)" }} />
-            <h3 className="vz-h3" style={{ margin: 0, textTransform: "capitalize" }}>{plan} plan</h3>
-            {st?.billing?.status && st.billing.status !== "none" ? <span className={`vz-pill ${st.billing.status === "active" ? "mint" : "rose"}`}>{st.billing.status}</span> : null}
+            <h3 className="vz-h3" style={{ margin: 0 }}>{current?.name ?? plan} plan</h3>
+            {status !== "none" ? <span className={`vz-pill ${status === "active" || status === "trialing" ? "mint" : "rose"}`}>{status === "trialing" ? "trial" : status}</span> : null}
           </div>
-          <p className="vz-p" style={{ marginTop: 8 }}>
-            {plan === "developer" ? "Free. 250 issuances and 50 detections per month, 10 GB of storage. Hard limits." :
-             plan === "business" ? "$249 per month. 10,000 issuances and 2,000 detections included, 1 TB of storage, then metered. Content Credentials with a CA-issued certificate." :
-             "Custom agreement. Volume pricing, dedicated signing certificate, private deployment options."}
-          </p>
-          {st?.billing?.current_period_end ? <p className="vz-muted" style={{ fontSize: 12.5 }}>Current period ends {fmtDate(st.billing.current_period_end)}.</p> : null}
+          <p className="vz-p" style={{ marginTop: 8 }}>{current?.tagline}</p>
+          {current ? (
+            <p className="vz-muted" style={{ fontSize: 12.5 }}>
+              {current.limits.issuances >= Number.MAX_SAFE_INTEGER ? "Custom quantities by agreement." : `${current.limits.issuances.toLocaleString()} issuances and ${current.limits.detections.toLocaleString()} detections per month, ${fmtBytes(current.limits.storageBytes)} of storage${current.limits.hardCap ? ", hard limits." : ", then metered."}`}
+            </p>
+          ) : null}
+          {st?.billing?.current_period_end && !trialing ? <p className="vz-muted" style={{ fontSize: 12.5 }}>Current period ends {fmtDate(st.billing.current_period_end)}.</p> : null}
           {st?.provider === "paddle" ? <p className="vz-muted" style={{ fontSize: 12.5 }}>Payments and invoices are handled by Paddle, our merchant of record. Tax is calculated at checkout.</p> : null}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {plan === "developer" ? <button className="vz-btn vz-btn-primary" disabled={busy} onClick={() => void upgrade()}>Upgrade to Business <ArrowUpRight size={15} /></button> : null}
-            {st?.billing?.subscription_id ? <button className="vz-btn vz-btn-ghost" disabled={busy} onClick={() => void go(() => billingPortal(org.id))}>Manage subscription</button> : null}
+            {hasSub ? <button className="vz-btn vz-btn-ghost" disabled={busy} onClick={() => void go(() => billingPortal(org.id))}>Manage subscription</button> : null}
             <a className="vz-btn vz-btn-ghost" href="mailto:sales@vybz.cloud?subject=VYBZ%20Enterprise">Talk to sales</a>
           </div>
         </div>
@@ -298,6 +323,39 @@ export function BillingPage({ org, onChanged }: { org: Org; onChanged: () => voi
           </ul>
         </div>
       </div>
+
+      {plan !== "enterprise" ? (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
+            <h3 className="vz-h3" style={{ margin: 0 }}>Plans</h3>
+            <div className="vz-tabs" role="tablist" aria-label="Billing interval" style={{ marginBottom: 0, borderBottom: 0 }}>
+              <button type="button" role="tab" aria-selected={interval === "month"} className={`vz-tab ${interval === "month" ? "active" : ""}`} onClick={() => setInterval("month")}>Monthly</button>
+              <button type="button" role="tab" aria-selected={interval === "year"} className={`vz-tab ${interval === "year" ? "active" : ""}`} onClick={() => setInterval("year")}>Yearly, two months free</button>
+            </div>
+          </div>
+          <div className="vz-grid vz-grid-3" style={{ marginBottom: 16 }}>
+            {PLANS.filter((p) => p.price).map((p) => {
+              const isCurrent = current?.id === p.id;
+              const up = rank(p.id) > rank(plan);
+              const label = isCurrent ? "Current plan" : hasSub ? (up ? "Upgrade" : "Downgrade") : `Start ${p.trialDays}-day trial`;
+              return (
+                <div key={p.id} className={`vz-card ${p.featured ? "vz-card-accent" : ""}`}>
+                  <h4 className="vz-h3" style={{ marginBottom: 4 }}>{p.name}</h4>
+                  <div className="vz-stat">{formatUsd(p.price![interval])}<small>per {interval}</small></div>
+                  <p className="vz-muted" style={{ fontSize: 12.5 }}>{p.tagline}</p>
+                  <ul style={{ listStyle: "none", padding: 0, margin: "0 0 14px" }}>
+                    {p.features.map((f) => <li key={f} className="vz-p" style={{ fontSize: 13, margin: "4px 0" }}>{f}</li>)}
+                  </ul>
+                  <button type="button" className={`vz-btn ${isCurrent ? "vz-btn-ghost" : "vz-btn-primary"}`} style={{ width: "100%" }} disabled={busy || isCurrent} onClick={() => void subscribe(p.id)}>
+                    {label}{!isCurrent && !hasSub ? <ArrowUpRight size={15} /> : null}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          {!hasSub ? <p className="vz-muted" style={{ fontSize: 12.5, marginBottom: 16 }}>Trials take a card and convert to the paid plan when they end unless cancelled. Downgrades apply at the next renewal; upgrades apply immediately and are prorated.</p> : null}
+        </>
+      ) : null}
 
       {u ? (
         <div className="vz-grid vz-grid-3">

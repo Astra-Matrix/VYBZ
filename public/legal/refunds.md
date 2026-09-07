@@ -2,6 +2,10 @@
 
 Effective 2026-09-07. This policy applies to paid VYBZ plans, which are sold by Paddle as merchant of record. It is part of the [Terms of Service](/legal/terms).
 
+## Free trial
+
+Every paid plan starts with a 14-day trial. Cancel before it ends from Console → Billing → Manage subscription and nothing is charged. If a trial converts because you missed the reminder, email billing@vybz.cloud within 7 days of the first charge and we will refund it.
+
 ## First subscription payment
 
 If the Service does not work as described within the first 14 days after your first paid subscription payment, email billing@vybz.cloud from the address on the organization and we will refund that payment in full. Paddle issues the refund to the original payment method, usually within 5 to 10 business days depending on your bank.

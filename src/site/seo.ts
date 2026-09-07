@@ -80,7 +80,7 @@ const AGENTS_DESCRIPTION =
   "Every VYBZ capability as a Model Context Protocol tool, hosted at vybz.cloud or local with npx. Scoped keys, a full audit log, nothing leaves the organization.";
 
 const PRICING_DESCRIPTION =
-  "Developer plan free. Business at $249 per month with 10,000 issuances and 2,000 detections included. Enterprise by contract. Reads are always free.";
+  "Developer free. Creator $9, Pro $85, Ultimate $245 a month, each with a 14-day trial and two months free yearly. Enterprise by contract.";
 
 const STATIC_ROUTES: RouteSeo[] = [
   {
@@ -154,24 +154,10 @@ const STATIC_ROUTES: RouteSeo[] = [
         brand: { "@id": ORG_ID },
         offers: [
           { "@type": "Offer", name: "Developer", price: "0", priceCurrency: "USD", url: `${SITE}/pricing`, availability: "https://schema.org/InStock" },
-          {
-            "@type": "Offer",
-            name: "Business",
-            price: "249",
-            priceCurrency: "USD",
-            url: `${SITE}/pricing`,
-            availability: "https://schema.org/InStock",
-            priceSpecification: { "@type": "UnitPriceSpecification", price: "249", priceCurrency: "USD", billingIncrement: 1, unitCode: "MON" },
-          },
-          {
-            "@type": "Offer",
-            name: "Business, yearly",
-            price: "2490",
-            priceCurrency: "USD",
-            url: `${SITE}/pricing`,
-            availability: "https://schema.org/InStock",
-            priceSpecification: { "@type": "UnitPriceSpecification", price: "2490", priceCurrency: "USD", billingIncrement: 1, unitCode: "ANN" },
-          },
+          ...[["Creator", "9", "90"], ["Pro", "85", "850"], ["Ultimate", "245", "2450"]].flatMap(([name, month, year]) => [
+            { "@type": "Offer", name, price: month, priceCurrency: "USD", url: `${SITE}/pricing`, availability: "https://schema.org/InStock", priceSpecification: { "@type": "UnitPriceSpecification", price: month, priceCurrency: "USD", billingIncrement: 1, unitCode: "MON" } },
+            { "@type": "Offer", name: `${name}, yearly`, price: year, priceCurrency: "USD", url: `${SITE}/pricing`, availability: "https://schema.org/InStock", priceSpecification: { "@type": "UnitPriceSpecification", price: year, priceCurrency: "USD", billingIncrement: 1, unitCode: "ANN" } },
+          ]),
         ],
       },
       breadcrumb([
