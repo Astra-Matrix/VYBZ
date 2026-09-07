@@ -1,7 +1,8 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { NavLink, Link, useLocation } from "react-router-dom";
 import { useSession } from "@/store/session";
 import { applySeo, seoFor } from "./seo";
+import { Backdrop } from "./Backdrop";
 import "./site.css";
 
 const NAV = [
@@ -15,14 +16,43 @@ const NAV = [
 export function SiteShell({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
   const { userId, signOut } = useSession();
   const location = useLocation();
+  const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     applySeo(seoFor(location.pathname));
     window.scrollTo({ top: 0 });
   }, [location.pathname]);
 
+  // Cards carry a spotlight at the pointer (--mx/--my), and sections arrive as they scroll into view.
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const onMove = (e: PointerEvent) => {
+      const card = (e.target as HTMLElement | null)?.closest?.(".vz-card") as HTMLElement | null;
+      if (!card) return;
+      const r = card.getBoundingClientRect();
+      card.style.setProperty("--mx", `${e.clientX - r.left}px`);
+      card.style.setProperty("--my", `${e.clientY - r.top}px`);
+    };
+    el.addEventListener("pointermove", onMove, { passive: true });
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const sections = Array.from(el.querySelectorAll<HTMLElement>(".vz-section"));
+    let io: IntersectionObserver | null = null;
+    if (reduced || typeof IntersectionObserver === "undefined") {
+      sections.forEach((s) => s.classList.add("in"));
+    } else {
+      sections.forEach((s) => s.classList.add("vz-io"));
+      io = new IntersectionObserver((entries) => {
+        for (const en of entries) if (en.isIntersecting) { en.target.classList.add("in"); io?.unobserve(en.target); }
+      }, { rootMargin: "0px 0px -10% 0px", threshold: 0.08 });
+      sections.forEach((s) => io!.observe(s));
+    }
+    return () => { el.removeEventListener("pointermove", onMove); io?.disconnect(); };
+  }, [location.pathname]);
+
   return (
-    <div className="vz">
+    <div className="vz" ref={root}>
       <a className="vz-skip" href="#main">Skip to content</a>
+      <Backdrop />
       <div className="vz-backdrop" aria-hidden />
       <header className="vz-header">
         <div className="vz-wrap vz-header-inner">

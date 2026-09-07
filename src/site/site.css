@@ -209,3 +209,75 @@
 :focus-visible { outline: 2px solid rgb(var(--vz-cyan-rgb) / 0.9); outline-offset: 2px; border-radius: 4px; }
 .vz-input:focus-visible { outline: none; }
 main:focus { outline: none; }
+
+/* ── Ambient backdrop (canvas) ─────────────────────────────────────────────── */
+.vz-backdrop-canvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; display: block; }
+.vz-backdrop { background: transparent; }        /* the canvas paints the ground and the fields */
+.vz-backdrop::before { display: none; }           /* the lattice is drawn by the canvas */
+.vz-backdrop::after { opacity: 0.28; }            /* film grain stays */
+
+/* ── Hover: cards carry a spotlight that follows the pointer ───────────────── */
+.vz-card { --mx: 50%; --my: 50%; overflow: hidden; transition: border-color .25s, transform .25s cubic-bezier(.2,.7,.2,1), box-shadow .25s; }
+.vz-card::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0;
+  background: radial-gradient(420px circle at var(--mx) var(--my), rgb(var(--vz-cyan-rgb) / 0.10), rgb(var(--vz-violet-rgb) / 0.05) 40%, transparent 70%);
+  transition: opacity .35s;
+}
+.vz-card:hover::after { opacity: 1; }
+.vz-card:hover { border-color: rgb(var(--vz-cyan-rgb) / 0.28); box-shadow: 0 18px 50px rgba(0,0,0,.35), 0 0 0 1px rgb(var(--vz-cyan-rgb) / 0.06); transform: translateY(-2px); }
+.vz-card > * { position: relative; z-index: 1; }
+.vz-card-accent:hover::before { background: linear-gradient(135deg, rgb(var(--vz-cyan-rgb) / 0.9), rgb(var(--vz-mint) / 0.3) 45%, rgb(var(--vz-violet-rgb) / 0.9)); }
+.vz-icon { transition: transform .25s cubic-bezier(.2,.7,.2,1), box-shadow .25s; }
+.vz-card:hover .vz-icon { transform: translateY(-1px) scale(1.04); box-shadow: 0 0 24px rgb(var(--vz-cyan-rgb) / 0.25); }
+.vz-card:hover .vz-icon.violet { box-shadow: 0 0 24px rgb(var(--vz-violet-rgb) / 0.3); }
+.vz-card:hover .vz-icon.mint { box-shadow: 0 0 24px rgba(56,232,176,.3); }
+
+/* Buttons and pills answer the pointer */
+.vz-btn { transition: transform .15s cubic-bezier(.2,.7,.2,1), background .2s, border-color .2s, box-shadow .25s, filter .2s; }
+.vz-btn:hover { transform: translateY(-1px); }
+.vz-btn:active { transform: translateY(1px); }
+.vz-btn-primary { position: relative; overflow: hidden; }
+.vz-btn-primary::after { content: ""; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.35) 50%, transparent 70%); transform: translateX(-120%); transition: transform .6s ease; }
+.vz-btn-primary:hover::after { transform: translateX(120%); }
+.vz-btn-primary:hover { filter: brightness(1.06); box-shadow: 0 12px 36px rgb(var(--vz-cyan-rgb) / 0.5), inset 0 1px 0 rgba(255,255,255,0.35); }
+.vz-btn-ghost:hover { border-color: rgb(var(--vz-cyan-rgb) / 0.45); box-shadow: 0 0 0 4px rgb(var(--vz-cyan-rgb) / 0.08); }
+.vz-pill { transition: transform .2s, box-shadow .25s, border-color .2s; }
+.vz-pill:hover { transform: translateY(-1px); border-color: rgb(var(--vz-cyan-rgb) / 0.5); box-shadow: 0 0 18px rgb(var(--vz-cyan-rgb) / 0.18); }
+.vz-pill.violet:hover { border-color: rgb(var(--vz-violet-rgb) / 0.6); box-shadow: 0 0 18px rgb(var(--vz-violet-rgb) / 0.22); }
+.vz-pill.mint:hover { border-color: rgba(56,232,176,.6); box-shadow: 0 0 18px rgba(56,232,176,.22); }
+.vz-nav a { position: relative; }
+.vz-nav a::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: 5px; height: 1px; background: var(--vz-cyan); transform: scaleX(0); transform-origin: left; transition: transform .25s cubic-bezier(.2,.7,.2,1); }
+.vz-nav a:hover::after, .vz-nav a.active::after { transform: scaleX(1); }
+.vz-logo-mark { transition: transform .4s cubic-bezier(.2,.7,.2,1), box-shadow .4s; }
+.vz-logo:hover .vz-logo-mark { transform: rotate(90deg); box-shadow: 0 0 34px rgb(var(--vz-cyan-rgb) / 0.55); }
+.vz-code { transition: border-color .25s, box-shadow .25s; }
+.vz-code:hover { border-color: rgb(var(--vz-cyan-rgb) / 0.25); box-shadow: 0 0 0 1px rgb(var(--vz-cyan-rgb) / 0.05), 0 20px 50px rgba(0,0,0,.35); }
+
+/* ── Cinematic hero ────────────────────────────────────────────────────────── */
+.vz-hero { position: relative; }
+.vz-hero-signal { position: absolute; left: 50%; top: 42%; width: min(1400px, 140vw); height: 200px; transform: translate(-50%, -50%); pointer-events: none; opacity: .55; z-index: 0; }
+.vz-hero-signal path { fill: none; stroke: url(#vz-signal-grad); stroke-width: 1.2; stroke-linecap: round; stroke-dasharray: 3000; stroke-dashoffset: 3000; animation: vz-signal 2.6s cubic-bezier(.3,.6,.2,1) .35s forwards; }
+@keyframes vz-signal { to { stroke-dashoffset: 0; } }
+.vz-hero > * { position: relative; z-index: 1; }
+.vz-reveal { display: block; clip-path: inset(0 0 100% 0); transform: translateY(24px); opacity: 0; animation: vz-reveal 1s cubic-bezier(.2,.75,.2,1) forwards; }
+.vz-reveal.r1 { animation-delay: .15s; } .vz-reveal.r2 { animation-delay: .35s; } .vz-reveal.r3 { animation-delay: .6s; } .vz-reveal.r4 { animation-delay: .9s; } .vz-reveal.r5 { animation-delay: 1.15s; }
+@keyframes vz-reveal { to { clip-path: inset(0 0 -20% 0); transform: none; opacity: 1; } }
+.vz-h1 .line { display: block; }
+.vz-beam { position: relative; height: 1px; margin: 22px 0 26px; max-width: 520px; background: linear-gradient(90deg, rgb(var(--vz-cyan-rgb) / 0.0), rgb(var(--vz-cyan-rgb) / 0.7) 30%, rgb(var(--vz-violet-rgb) / 0.7) 70%, transparent); overflow: hidden; }
+.vz-beam::after { content: ""; position: absolute; inset: -6px auto -6px 0; width: 120px; background: linear-gradient(90deg, transparent, #fff, transparent); filter: blur(2px); opacity: .9; animation: vz-beam 2.2s cubic-bezier(.4,.1,.2,1) .8s both; }
+@keyframes vz-beam { from { transform: translateX(-140px); opacity: 0; } 20% { opacity: 1; } to { transform: translateX(560px); opacity: 0; } }
+.vz-eyebrow.pulse::before { animation: vz-eyebrow 1.6s cubic-bezier(.2,.7,.2,1) .2s both; transform-origin: left; }
+@keyframes vz-eyebrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* Sections arrive as they scroll into view */
+.vz-io { opacity: 0; transform: translateY(18px); transition: opacity .8s cubic-bezier(.2,.7,.2,1), transform .8s cubic-bezier(.2,.7,.2,1); }
+.vz-io.in { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .vz-reveal, .vz-hero-signal path, .vz-beam::after, .vz-eyebrow.pulse::before { animation: none; }
+  .vz-reveal { clip-path: none; transform: none; opacity: 1; }
+  .vz-io { opacity: 1; transform: none; transition: none; }
+  .vz-card, .vz-btn, .vz-pill, .vz-icon, .vz-logo-mark { transition: none; }
+  .vz-card:hover, .vz-btn:hover, .vz-pill:hover { transform: none; }
+  .vz-btn-primary::after { display: none; }
+}

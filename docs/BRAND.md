@@ -28,9 +28,17 @@ Words we avoid: drop, vibe, creator, community, magic, AI-powered, revolutionary
 | Radius | 18px cards, 12px controls | |
 | Type | Lexend (UI), system monospace (code) | |
 
-Backdrop: two soft radial glows (cyan top-left, violet top-right), a faint 64px grid fading from the top, and a low-opacity noise layer. Cards use a 1px border and a subtle vertical gradient; accent cards carry a gradient border from cyan to violet.
+Backdrop: a single canvas paints the ground, two aurora fields (cyan top-left, violet top-right) drifting on slow sines, a faint mint field below the fold, a dot lattice fading from the top, and a soft spotlight that trails the pointer; dots near the pointer brighten to cyan and lean toward it. A low-opacity grain layer sits on top. Capped at 30 frames per second, paused when the tab is hidden, rendered once as a still image under `prefers-reduced-motion`. Cards use a 1px border and a subtle vertical gradient; accent cards carry a gradient border from cyan to violet.
 
-Motion: 600 ms rise on hero elements, 120 ms press on buttons, nothing else animates. Respect `prefers-reduced-motion`.
+Motion, all of it easing on `cubic-bezier(.2,.7,.2,1)`:
+
+- Hero: a staged reveal. The eyebrow rule draws in, each headline line rises out of a clip with a 200 ms stagger, a light beam sweeps once beneath the headline, then the lead and the actions arrive. A thin signal line in the three brand colors draws itself once behind the headline. Total under two seconds; nothing loops.
+- Sections fade and rise 18 px as they enter the viewport, once.
+- Hover: cards lift 2 px, tint their border cyan, and carry a spotlight that follows the pointer; icons lift; primary buttons carry one sheen pass; ghost buttons and pills glow in their own color; the nav underline slides in; the logo mark turns a quarter turn.
+- Press: 120 ms.
+- Under `prefers-reduced-motion` every animation and transition is off and the page is complete on first paint.
+
+Nothing flashes, nothing loops except the ambient backdrop, and no motion carries information that is not also stated in text.
 
 ## Logo
 
@@ -42,4 +50,4 @@ A rounded square with a conic gradient (cyan → violet → mint) and a dark inn
 - Feature card: title of three words or fewer, then one or two sentences with a concrete mechanism.
 - Error message: what happened, what to do, in that order. Include the request id.
 
-Last updated: 2026-09-05
+Last updated: 2026-09-07

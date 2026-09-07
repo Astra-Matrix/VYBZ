@@ -15,6 +15,18 @@ const DETECT = `curl -X POST https://vybz.cloud/v1/provenance/assets/ast_7f3…/
 # → { "attributed": { "recipient": "sync-house@partner.com", "score": 0.41 },
 #     "confidence": "high", "candidates": 212 }`;
 
+// A slow audio-like line drawn once behind the hero, in the three brand colors.
+const SIGNAL = (() => {
+  const pts: string[] = [];
+  for (let x = 0; x <= 1400; x += 10) {
+    const t = x / 1400;
+    const env = Math.sin(t * Math.PI) ** 1.6;
+    const y = 100 + env * (Math.sin(x * 0.021) * 46 + Math.sin(x * 0.0057 + 1.3) * 28 + Math.sin(x * 0.047 + 0.4) * 9);
+    pts.push(`${x === 0 ? "M" : "L"}${x} ${y.toFixed(1)}`);
+  }
+  return pts.join(" ");
+})();
+
 const MCP = `{
   "mcpServers": {
     "vybz": {
@@ -29,20 +41,31 @@ export function HomePage() {
   return (
     <SiteShell>
       <section className="vz-hero">
-        <div className="vz-rise">
-          <span className="vz-eyebrow">Audio infrastructure for businesses</span>
+        <svg className="vz-hero-signal" viewBox="0 0 1400 200" preserveAspectRatio="none" aria-hidden>
+          <defs>
+            <linearGradient id="vz-signal-grad" x1="0" x2="1">
+              <stop offset="0" stopColor="#00c2ff" stopOpacity="0" />
+              <stop offset="0.35" stopColor="#00c2ff" stopOpacity="0.9" />
+              <stop offset="0.65" stopColor="#8b7cff" stopOpacity="0.9" />
+              <stop offset="1" stopColor="#38e8b0" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path d={SIGNAL} />
+        </svg>
+        <div>
+          <span className="vz-eyebrow pulse vz-reveal r1">Audio infrastructure. Finally.</span>
           <h1 className="vz-h1">
-            Every copy traceable.
-            <br />
-            <span className="grad">Every session recoverable.</span>
+            <span className="line vz-reveal r2">Every copy traceable.</span>
+            <span className="line grad vz-reveal r3">Every session recoverable.</span>
           </h1>
-          <p className="vz-lead">
-            VYBZ is two APIs behind one key. <strong>Provenance</strong> watermarks, signs, verifies, and attributes audio so you always know who
-            received a file and who leaked it. <strong>Vault</strong> is version control for DAW projects and sample libraries, content-addressed and
-            deduplicated. Both are built for humans in a console and for AI agents over MCP.
+          <div className="vz-beam" aria-hidden />
+          <p className="vz-lead vz-reveal r4">
+            Two APIs behind one key. <strong>Provenance</strong> watermarks, signs, verifies, and attributes audio, so you always know who received a
+            file and who leaked it. <strong>Vault</strong> is version control for DAW projects and sample libraries, content-addressed and deduplicated.
+            A console for people, MCP for agents.
           </p>
         </div>
-        <div className="vz-rise d1" style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 26 }}>
+        <div className="vz-reveal r5" style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 26 }}>
           <Link to="/signin?mode=create" className="vz-btn vz-btn-primary">
             Create an API key <ArrowRight size={16} />
           </Link>
@@ -51,7 +74,7 @@ export function HomePage() {
             <Bot size={16} /> Connect an agent
           </Link>
         </div>
-        <div className="vz-rise d2" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 26 }}>
+        <div className="vz-reveal r5" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 26 }}>
           <span className="vz-pill cyan"><Fingerprint size={12} /> Forensic watermark</span>
           <span className="vz-pill cyan"><FileCheck2 size={12} /> C2PA Content Credentials</span>
           <span className="vz-pill violet"><GitBranch size={12} /> Content-addressed VCS</span>
@@ -138,7 +161,7 @@ export function HomePage() {
 
       <section className="vz-section" style={{ textAlign: "center" }}>
         <h2 className="vz-h2">Start in the console. Ship with the API.</h2>
-        <p className="vz-lead" style={{ margin: "0 auto" }}>Developer plan is free. Business and enterprise add volume, Content Credentials with your own certificate, and SLAs.</p>
+        <p className="vz-lead" style={{ margin: "0 auto" }}>Developer is free. Creator, Pro, and Ultimate start with a 14-day trial; Enterprise adds volume, your own certificate, and an SLA.</p>
         <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 22 }}>
           <Link to="/signin?mode=create" className="vz-btn vz-btn-primary">Create an API key</Link>
           <Link to="/pricing" className="vz-btn vz-btn-ghost">See pricing</Link>
