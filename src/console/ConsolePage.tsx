@@ -1,10 +1,11 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { KeyRound, Activity, ScrollText, Bot, LayoutDashboard, Plus, Copy, Check, ShieldCheck, Users, CreditCard, Fingerprint, Webhook, FolderGit2 } from "lucide-react";
+import { KeyRound, Activity, ScrollText, Bot, LayoutDashboard, Plus, Copy, Check, ShieldCheck, Users, CreditCard, Fingerprint, Webhook, FolderGit2, AudioLines } from "lucide-react";
 import { MembersPage, BillingPage, JoinPage } from "./TeamBilling";
 import { VerifyPage } from "./VerifyPage";
 import { WebhooksPage } from "./WebhooksPage";
 import { VaultPage } from "./VaultPage";
+import { AssetsPage } from "./AssetsPage";
 import { useSession } from "@/store/session";
 import { SiteShell, Code } from "@/site/SiteShell";
 import {
@@ -85,6 +86,7 @@ export function ConsolePage() {
             <div className="group">Console</div>
             <NavLink to="/console" end className={({ isActive }) => (isActive ? "active" : "")}><LayoutDashboard size={15} /> Overview</NavLink>
             <NavLink to="/console/keys" className={({ isActive }) => (isActive ? "active" : "")}><KeyRound size={15} /> API keys</NavLink>
+            <NavLink to="/console/assets" className={({ isActive }) => (isActive ? "active" : "")}><AudioLines size={15} /> Assets</NavLink>
             <NavLink to="/console/verify" className={({ isActive }) => (isActive ? "active" : "")}><Fingerprint size={15} /> Verify</NavLink>
             <NavLink to="/console/webhooks" className={({ isActive }) => (isActive ? "active" : "")}><Webhook size={15} /> Webhooks</NavLink>
             <NavLink to="/console/vault" className={({ isActive }) => (isActive ? "active" : "")}><FolderGit2 size={15} /> Vault</NavLink>
@@ -100,6 +102,7 @@ export function ConsolePage() {
               <Routes>
                 <Route index element={<Overview org={org} />} />
                 <Route path="keys" element={<Keys org={org} />} />
+                <Route path="assets" element={<AssetsPage org={org} />} />
                 <Route path="verify" element={<VerifyPage org={org} />} />
                 <Route path="webhooks" element={<WebhooksPage org={org} />} />
                 <Route path="vault" element={<VaultPage org={org} />} />

@@ -209,6 +209,7 @@ Authorization: Bearer vybz_live_…`} />
                 ["vybz_billing_usage", "Plan usage this month and closed-month reports", "org:read"],
                 ["provenance_register", "Register a WAV original", "provenance:write"],
                 ["provenance_issue", "Issue a watermarked copy to a recipient", "provenance:write"],
+                ["provenance_issue_batch", "Copies for up to 50 recipients, with a manifest of links", "provenance:write"],
                 ["provenance_verify", "Exact-hash verification of any file", "provenance:read"],
                 ["provenance_detect", "Attribute a suspect file to a recipient", "provenance:detect"],
                 ["provenance_ledger / chain_verify", "Event history and chain integrity", "provenance:read"],

@@ -65,6 +65,11 @@ JSON `{ "recipient": string, "license"?: string, "store"?: boolean, "c2pa"?: boo
 Response `201`: WAV bytes with headers `X-VYBZ-Issuance-Id`, `X-VYBZ-Watermark-Id`, `X-VYBZ-C2PA` (`1` when a Content Credentials manifest was attached), `X-VYBZ-SHA256`.
 With `Accept: application/json` or `store: true`: the copy is stored and the body is the issuance plus `download: { url, expires_in: 3600 }`.
 
+### `POST /provenance/assets/{id}/issue/batch` — `provenance:write`
+JSON `{ "recipients": (string | { "recipient", "license"? })[], "license"?: string, "c2pa"?: boolean }`, up to 50 recipients. The original is decoded once; every recipient gets a distinct watermark, a stored copy, and a one-hour download link. Each successful item is one issuance.
+
+Response `201` (or `200` when nothing was issued): `{ object: "list", asset_id, batch_id, data: [...], summary: { total, issued, errors }, manifest: { url, expires_in } }`. Each `data` item is either `{ status: "ok", ...issuance, bytes, download }` or `{ name, status: "error", error }` in request order. `manifest` links a stored JSON copy of the response, so the list of links can be handed to whoever distributes the copies. If the plan runs out mid-batch the remaining recipients are reported as `plan_limit_reached` and no further work is done.
+
 ### `GET /provenance/assets/{id}/issuances` — `provenance:read`
 ### `GET /provenance/assets/{id}/ledger` — `provenance:read`
 Ordered chain events for the asset: `register`, `issue`, `c2pa`, `verify`, `detect`.

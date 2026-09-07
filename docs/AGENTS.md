@@ -53,6 +53,7 @@ Give it `https://vybz.cloud/v1/openapi.json` and `https://vybz.cloud/llms.txt`. 
 | `provenance_register` | `provenance:write` | Register a lossless original, WAV, AIFF, or FLAC (`file` / `url` / `base64`, `title`, `external_ref`). |
 | `provenance_list_assets`, `provenance_get_asset` | `provenance:read` | Browse assets. |
 | `provenance_issue` | `provenance:write` | Issue a copy to `recipient`. Returns a link, or writes `output_file` locally. |
+| `provenance_issue_batch` | `provenance:write` | Up to 50 `recipients` in one call: a link per recipient plus a stored manifest of links. |
 | `provenance_list_issuances`, `provenance_ledger` | `provenance:read` | Who received what; chained history. |
 | `provenance_verify` | `provenance:read` | What is this file? Exact hash, PCM hash, fingerprint (identifies the original, no id needed), Content Credentials, and with `attribute: true` the watermark. Any format. `files` / `urls` for batches of 25. |
 | `provenance_detect` | `provenance:detect` | Attribute suspect files to a recipient of a known asset. Any format, resampled automatically. `files` / `urls` for batches. |
@@ -84,7 +85,7 @@ Every tool declares the standard MCP annotations so a host can decide what to au
 | Annotation | Meaning here | Examples |
 |---|---|---|
 | `readOnlyHint: true` | Changes nothing the organization owns and costs nothing. | `vybz_whoami`, `vybz_billing_usage`, every list/get/tree/diff, `vault_status`, `provenance_verify` |
-| `idempotentHint: false` | Repeating the call creates another record or another charge. | `provenance_issue` (new watermark each time), `provenance_detect` (metered per file), `vault_create_repo` |
+| `idempotentHint: false` | Repeating the call creates another record or another charge. | `provenance_issue` and `provenance_issue_batch` (new watermark each time), `provenance_detect` (metered per file), `vault_create_repo` |
 | `destructiveHint: true` | Deletes or overwrites. | `webhooks_delete`, `vault_restore` |
 | `openWorldHint: true` | Reaches outside VYBZ: fetches a URL you gave it, or contacts a customer endpoint. | `provenance_register` with `url`, `provenance_verify`, `provenance_detect`, `vault_upload_blob`, `webhooks_*` |
 

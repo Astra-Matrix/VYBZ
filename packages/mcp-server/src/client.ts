@@ -131,6 +131,9 @@ export class VybzClient {
   issueLink(id: string, req: { recipient: string; license?: string; c2pa?: boolean }) {
     return this.call<Record<string, unknown>>("POST", `/provenance/assets/${encodeURIComponent(id)}/issue`, { json: { ...req, store: true }, accept: "application/json" });
   }
+  issueBatch(id: string, req: { recipients: Array<string | { recipient: string; license?: string }>; license?: string; c2pa?: boolean }) {
+    return this.call<{ data: Record<string, unknown>[]; summary: Record<string, number>; manifest: { url: string | null; expires_in: number } | null }>("POST", `/provenance/assets/${encodeURIComponent(id)}/issue/batch`, { json: req });
+  }
   listIssuances(id: string) { return this.call<{ data: Record<string, unknown>[] }>("GET", `/provenance/assets/${encodeURIComponent(id)}/issuances`); }
   ledger(id: string) { return this.call<{ data: Record<string, unknown>[] }>("GET", `/provenance/assets/${encodeURIComponent(id)}/ledger`); }
   detect(id: string, bytes: Uint8Array, name = "suspect") {

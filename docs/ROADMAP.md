@@ -8,12 +8,12 @@ Ordered by revenue impact. Dates are targets, not promises.
 - **Compressed input.** Shipped 2026-09-07: WAV, AIFF, FLAC, MP3, Ogg Vorbis, and Opus decode in the edge; AAC/M4A, ALAC, MP4, MOV, WebM through the decode worker. Suspects are resampled to the asset's rate. Remaining: host the decode worker.
 - **Verification evidence.** Shipped 2026-09-07: exact hash, PCM hash, perceptual fingerprint with offset, Content Credentials check, and opt-in watermark attribution, in one call. Batches of 25 files or URLs. Console Verify page.
 - **Chunked blob upload.** Resumable uploads for files above 500 MB.
+- **Batch issue.** Shipped 2026-09-07: `POST /provenance/assets/{id}/issue/batch`, up to 50 recipients, a link per recipient and a stored manifest of links. Console Assets page for registering, issuing, and reviewing issuances.
 - **Vault console.** Shipped 2026-09-07: repositories, branches, history, file lists with downloads, per-commit changes, and restore to a local folder in browsers with directory access.
 - **Webhooks.** Shipped 2026-09-07: `asset.registered`, `issuance.created`, `detection.completed`, `detection.attributed`, `commit.created` with HMAC signatures, retries, delivery log, console page, and MCP tools.
 
 ## Next (Q1 2027)
 
-- **Batch issue.** One call, N recipients, a zip or a manifest of links.
 - **Detection queue.** Asynchronous detection for assets with very large issuance counts, with a job id and webhook.
 - **Watermark for delivered MP3.** Embed in the decoded domain and re-encode so customers who ship MP3 keep attribution.
 - **Auto-snapshot daemon.** Local watcher that commits a project folder after each save, derived from `tools/vybz-bridge`.

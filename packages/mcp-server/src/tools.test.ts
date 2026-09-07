@@ -69,7 +69,7 @@ describe("tool registry", () => {
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
       [
-        "provenance_chain_verify", "provenance_detect", "provenance_formats", "provenance_get_asset", "provenance_issue", "provenance_ledger",
+        "provenance_chain_verify", "provenance_detect", "provenance_formats", "provenance_get_asset", "provenance_issue", "provenance_issue_batch", "provenance_ledger",
         "provenance_list_assets", "provenance_list_issuances", "provenance_register", "provenance_verify",
         "vault_blob_exists", "vault_blob_link", "vault_branches", "vault_commit_entries", "vault_create_branch", "vault_create_repo", "vault_diff",
         "vault_get_commit", "vault_get_repo", "vault_history", "vault_list_repos", "vault_tree", "vault_upload_blob",
@@ -106,6 +106,8 @@ describe("tool registry", () => {
     expect(by.provenance_detect.readOnlyHint).toBe(false);
     expect(by.provenance_detect.idempotentHint).toBe(false);
     expect(by.provenance_issue.idempotentHint).toBe(false);
+    expect(by.provenance_issue_batch.idempotentHint).toBe(false);
+    expect(by.provenance_issue_batch.readOnlyHint).toBe(false);
     expect(by.webhooks_delete.destructiveHint).toBe(true);
     expect(by.vault_restore.destructiveHint).toBe(true);
     expect(by.vault_commit_folder.destructiveHint).toBe(false);

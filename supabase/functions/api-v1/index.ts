@@ -383,34 +383,45 @@ async function chainVerify(ctx: Ctx) {
   return json({ object: "provenance.chain", org_id: ctx.principal.orgId, ...row }, 200, ctx.headers);
 }
 
-async function issue(ctx: Ctx, id: string) {
-  requireScope(ctx.principal, "provenance:write");
-  if (!WM_SECRET) throw new ApiError(503, "not_configured", "Watermarking is not configured on this deployment.");
-  await planCheck(ctx, "issue");
-  const a = await getAsset(ctx, id);
-  const body = await readJson<{ recipient?: string; license?: string; store?: boolean; c2pa?: boolean }>(ctx.req);
-  const recipient = String(body.recipient ?? "").trim();
-  if (!recipient || recipient.length > 200) {
-    throw new ApiError(422, "invalid_recipient", "`recipient` is required (1–200 characters). Use your own stable identifier for the receiving party.");
-  }
-  const license = body.license ? String(body.license).slice(0, 200) : null;
+type IssueRequest = { recipient: string; license: string | null; c2pa: boolean };
+type Original = { channels: Float32Array[]; sampleRate: number };
+type IssuedCopy = { iss: Record<string, any>; delivered: Uint8Array; watermarkId: string; c2pa: boolean; deliveredSha: string };
 
+const MAX_BATCH_RECIPIENTS = 50;
+
+/** Decode the stored original once; copies are watermarked from cloned channels. */
+async function loadOriginal(a: Record<string, any>): Promise<Original> {
   const dl = await admin.storage.from(ORIGINALS).download(a.storage_path);
   if (dl.error || !dl.data) throw new ApiError(500, "storage_error", "The original could not be read.");
-  let wav: { channels: Float32Array[]; sampleRate: number };
   try {
-    wav = await decodeAudio(new Uint8Array(await dl.data.arrayBuffer()), { lossless: true, maxFrames: Infinity });
+    const d = await decodeAudio(new Uint8Array(await dl.data.arrayBuffer()), { lossless: true, maxFrames: Infinity });
+    return { channels: d.channels, sampleRate: d.sampleRate };
   } catch {
     throw new ApiError(500, "corrupt_original", "The stored original could not be decoded.");
   }
+}
 
+function parseRecipient(v: unknown, fallbackLicense: string | null): { recipient: string; license: string | null } {
+  const raw = typeof v === "string" ? { recipient: v } : (v && typeof v === "object" ? v as { recipient?: unknown; license?: unknown } : {});
+  const recipient = String(raw.recipient ?? "").trim();
+  if (!recipient || recipient.length > 200) {
+    throw new ApiError(422, "invalid_recipient", "`recipient` is required (1–200 characters). Use your own stable identifier for the receiving party.");
+  }
+  const license = raw.license !== undefined && raw.license !== null ? String(raw.license).slice(0, 200) : fallbackLicense;
+  return { recipient, license };
+}
+
+/** Embed one recipient's watermark, optionally sign, record the issuance, append the ledger, emit the event. */
+async function issueCopy(ctx: Ctx, a: Record<string, any>, original: Original, o: IssueRequest): Promise<IssuedCopy> {
+  const { recipient, license } = o;
   const watermarkId = crypto.randomUUID();
   const key = await deriveKey(WM_SECRET, `${ctx.principal.orgId}|${a.id}|${recipient}|${watermarkId}`);
-  for (const ch of wav.channels) embedChannel(ch, key);
-  let delivered = encodeWav({ channels: wav.channels, sampleRate: wav.sampleRate });
+  const channels = original.channels.map((ch) => Float32Array.from(ch));
+  for (const ch of channels) embedChannel(ch, key);
+  let delivered = encodeWav({ channels, sampleRate: original.sampleRate });
 
   let c2pa = false;
-  if (body.c2pa !== false && C2PA_WORKER_URL && C2PA_WORKER_TOKEN) {
+  if (o.c2pa && C2PA_WORKER_URL && C2PA_WORKER_TOKEN) {
     try {
       const meta = {
         assetId: a.id,
@@ -464,40 +475,114 @@ async function issue(ctx: Ctx, id: string) {
   await chain(ctx, a.id, "issue", { issuance_id: iss.id, recipient, watermark_id: watermarkId, delivered_sha256: deliveredSha, c2pa });
   if (c2pa) await chain(ctx, a.id, "c2pa", { issuance_id: iss.id, delivered_sha256: deliveredSha });
   emitEvent(ctx.principal.orgId, "issuance.created", { ...issuanceView(iss), asset: { id: a.id, title: a.title } });
+  return { iss, delivered, watermarkId, c2pa, deliveredSha };
+}
+
+/** Store a delivered copy and mint a one-hour download link. */
+async function storeDelivery(ctx: Ctx, a: Record<string, any>, c: IssuedCopy): Promise<{ url: string | null; expires_in: number }> {
+  const path = `${ctx.principal.orgId}/deliveries/${c.iss.id}.wav`;
+  const up = await admin.storage.from(ORIGINALS).upload(path, c.delivered, { contentType: "audio/wav", upsert: true });
+  if (up.error) throw new ApiError(500, "storage_error", "The delivered copy could not be stored.");
+  const signed = await admin.storage.from(ORIGINALS).createSignedUrl(path, 3600, { download: `${slugify(a.title)}-${String(c.iss.recipient).slice(0, 24)}.wav` });
+  return { url: signed.data?.signedUrl ?? null, expires_in: 3600 };
+}
+
+async function issue(ctx: Ctx, id: string) {
+  requireScope(ctx.principal, "provenance:write");
+  if (!WM_SECRET) throw new ApiError(503, "not_configured", "Watermarking is not configured on this deployment.");
+  await planCheck(ctx, "issue");
+  const a = await getAsset(ctx, id);
+  const body = await readJson<{ recipient?: string; license?: string; store?: boolean; c2pa?: boolean }>(ctx.req);
+  const { recipient, license } = parseRecipient({ recipient: body.recipient, license: body.license }, null);
+  const original = await loadOriginal(a);
+  const c = await issueCopy(ctx, a, original, { recipient, license, c2pa: body.c2pa !== false });
 
   const h = {
     ...ctx.headers,
-    "X-VYBZ-Watermark-Id": watermarkId,
-    "X-VYBZ-Issuance-Id": iss.id,
-    "X-VYBZ-C2PA": c2pa ? "1" : "0",
-    "X-VYBZ-SHA256": deliveredSha,
+    "X-VYBZ-Watermark-Id": c.watermarkId,
+    "X-VYBZ-Issuance-Id": c.iss.id,
+    "X-VYBZ-C2PA": c.c2pa ? "1" : "0",
+    "X-VYBZ-SHA256": c.deliveredSha,
   };
 
   const store = body.store === true || wantsJson(ctx.req);
   if (store) {
-    const path = `${ctx.principal.orgId}/deliveries/${iss.id}.wav`;
-    const up = await admin.storage.from(ORIGINALS).upload(path, delivered, { contentType: "audio/wav", upsert: true });
-    if (up.error) throw new ApiError(500, "storage_error", "The delivered copy could not be stored.");
-    const signed = await admin.storage.from(ORIGINALS).createSignedUrl(path, 3600, { download: `${slugify(a.title)}-${recipient.slice(0, 24)}.wav` });
-    return json(
-      {
-        ...issuanceView(iss),
-        bytes: delivered.byteLength,
-        download: { url: signed.data?.signedUrl ?? null, expires_in: 3600 },
-      },
-      201,
-      h,
-    );
+    const download = await storeDelivery(ctx, a, c);
+    return json({ ...issuanceView(c.iss), bytes: c.delivered.byteLength, download }, 201, h);
   }
-  return new Response(new Blob([delivered as unknown as ArrayBuffer], { type: "audio/wav" }), {
+  return new Response(new Blob([c.delivered as unknown as ArrayBuffer], { type: "audio/wav" }), {
     status: 201,
     headers: {
       ...h,
       "Content-Type": "audio/wav",
-      "Content-Length": String(delivered.byteLength),
-      "Content-Disposition": `attachment; filename="${slugify(a.title)}-${watermarkId.slice(0, 8)}.wav"`,
+      "Content-Length": String(c.delivered.byteLength),
+      "Content-Disposition": `attachment; filename="${slugify(a.title)}-${c.watermarkId.slice(0, 8)}.wav"`,
     },
   });
+}
+
+/**
+ * One call, many recipients. The original is decoded once; every recipient gets
+ * a distinct watermark, a stored copy, and a one-hour link. The response is the
+ * manifest, and the same manifest is stored and linked so it can be handed on.
+ */
+async function issueBatch(ctx: Ctx, id: string) {
+  requireScope(ctx.principal, "provenance:write");
+  if (!WM_SECRET) throw new ApiError(503, "not_configured", "Watermarking is not configured on this deployment.");
+  const a = await getAsset(ctx, id);
+  const body = await readJson<{ recipients?: unknown; license?: string; c2pa?: boolean }>(ctx.req);
+  const list = Array.isArray(body.recipients) ? body.recipients : [];
+  if (!list.length) throw new ApiError(422, "validation", "`recipients` must be a non-empty array of strings or { recipient, license? } objects.");
+  if (list.length > MAX_BATCH_RECIPIENTS) throw new ApiError(422, "too_many_items", `At most ${MAX_BATCH_RECIPIENTS} recipients per call.`);
+  const fallbackLicense = body.license ? String(body.license).slice(0, 200) : null;
+  const requests = list.map((r) => parseRecipient(r, fallbackLicense));
+  const c2pa = body.c2pa !== false;
+
+  await planCheck(ctx, "issue");
+  const original = await loadOriginal(a);
+  const batchId = crypto.randomUUID();
+  const results: Record<string, unknown>[] = [];
+  let issued = 0;
+  let errors = 0;
+  let halted: ApiError | null = null;
+  for (const r of requests) {
+    if (halted) {
+      results.push(itemError(r.recipient, halted, ctx.requestId));
+      errors++;
+      continue;
+    }
+    try {
+      if (issued > 0) await planCheck(ctx, "issue");
+      const c = await issueCopy(ctx, a, original, { ...r, c2pa });
+      const download = await storeDelivery(ctx, a, c);
+      results.push({ status: "ok", ...issuanceView(c.iss), bytes: c.delivered.byteLength, download });
+      issued++;
+    } catch (e) {
+      results.push(itemError(r.recipient, e, ctx.requestId));
+      errors++;
+      if (e instanceof ApiError && e.status === 402) halted = e; // the plan is exhausted; stop burning work
+    }
+  }
+
+  const createdAt = new Date().toISOString();
+  const manifestBody = {
+    object: "provenance.issue_manifest",
+    batch_id: batchId,
+    asset: { id: a.id, title: a.title, sha256: a.sha256 },
+    created_at: createdAt,
+    links_expire_at: new Date(Date.now() + 3600_000).toISOString(),
+    items: results,
+    summary: { total: requests.length, issued, errors },
+  };
+  let manifest: { url: string | null; expires_in: number } | null = null;
+  const mpath = `${ctx.principal.orgId}/manifests/${batchId}.json`;
+  const up = await admin.storage.from(ORIGINALS).upload(mpath, new TextEncoder().encode(JSON.stringify(manifestBody, null, 2)), { contentType: "application/json", upsert: true });
+  if (!up.error) {
+    const signed = await admin.storage.from(ORIGINALS).createSignedUrl(mpath, 3600, { download: `${slugify(a.title)}-manifest.json` });
+    manifest = { url: signed.data?.signedUrl ?? null, expires_in: 3600 };
+  }
+  ctx.headers["X-VYBZ-Batch-Id"] = batchId;
+  return json({ object: "list", asset_id: a.id, batch_id: batchId, data: results, summary: { total: requests.length, issued, errors }, manifest }, issued > 0 ? 201 : 200, ctx.headers);
 }
 
 // ── Provenance: input, decoding, evidence ───────────────────────────────────
@@ -1609,7 +1694,8 @@ async function route(ctx: Ctx): Promise<Response> {
     if (p1 === "assets") {
       if (!p2) return m === "POST" ? registerAsset(ctx) : m === "GET" ? listAssets(ctx) : methodNotAllowed();
       if (!p3 && m === "GET") return showAsset(ctx, p2);
-      if (p3 === "issue" && m === "POST") return issue(ctx, p2);
+      if (p3 === "issue" && p4 === "batch" && m === "POST") return issueBatch(ctx, p2);
+      if (p3 === "issue" && !p4 && m === "POST") return issue(ctx, p2);
       if (p3 === "detect" && !p4 && m === "POST") return detect(ctx, p2);
       if (p3 === "detect" && p4 === "batch" && m === "POST") return detectBatch(ctx, p2);
       if (p3 === "issuances" && m === "GET") return listIssuances(ctx, p2);

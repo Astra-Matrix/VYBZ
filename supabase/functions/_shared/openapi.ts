@@ -89,6 +89,15 @@ export function openapiDocument(base: string) {
           },
         },
       },
+      "/provenance/assets/{id}/issue/batch": {
+        post: {
+          tags: ["Provenance"], summary: "Issue watermarked copies to many recipients",
+          description: "One call, up to 50 recipients. The original is decoded once and each recipient receives a distinct watermark, a stored copy, and a one-hour download link. The response lists every item in order with `status: ok` or an error; the same list is stored as a JSON manifest and linked under `manifest`. Each successful item counts as one issuance. When the plan runs out mid-batch, the remaining recipients are reported as `plan_limit_reached` and nothing more is charged.",
+          parameters: [c("id", "Asset id")],
+          requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/IssueBatchRequest" } } } },
+          responses: { "201": jsonOf("IssueBatch", "At least one copy issued"), "200": jsonOf("IssueBatch", "No copies issued"), "422": err("Missing or too many recipients"), "402": err("Plan limit reached before the first copy") },
+        },
+      },
       "/provenance/assets/{id}/issuances": { get: { tags: ["Provenance"], summary: "List issued copies", parameters: [idParam("id", "Asset id")], responses: { "200": jsonOf("IssuanceList") } } },
       "/provenance/assets/{id}/ledger": { get: { tags: ["Provenance"], summary: "Hash-chained event ledger for an asset", parameters: [idParam("id", "Asset id")], responses: { "200": { description: "Ordered chain events." } } } },
       "/provenance/assets/{id}/detect": {
@@ -194,6 +203,24 @@ export function openapiDocument(base: string) {
         Asset: { type: "object", properties: { id: { type: "string" }, object: { const: "provenance.asset" }, title: { type: "string" }, external_ref: { type: ["string", "null"] }, sha256: { type: "string" }, pcm_sha256: { type: ["string", "null"], description: "Hash of the decoded audio; the same across lossless containers." }, source_format: { type: ["string", "null"] }, fingerprint_frames: { type: ["integer", "null"] }, bytes: { type: "integer" }, mime: { type: "string" }, sample_rate: { type: ["integer", "null"] }, channels: { type: ["integer", "null"] }, duration_sec: { type: ["number", "null"] }, created_at: { type: "string" }, links: { type: "object" } } },
         AssetList: { type: "object", properties: { object: { const: "list" }, data: { type: "array", items: { $ref: "#/components/schemas/Asset" } } } },
         IssueRequest: { type: "object", properties: { recipient: { type: "string", description: "Your stable identifier for the receiving party (email, account id, partner name)." }, license: { type: "string" }, store: { type: "boolean", description: "Store the delivered copy and return a download link instead of bytes." }, c2pa: { type: "boolean", default: true } }, required: ["recipient"] },
+        IssueBatchRequest: {
+          type: "object",
+          properties: {
+            recipients: { type: "array", minItems: 1, maxItems: 50, items: { oneOf: [{ type: "string" }, { type: "object", properties: { recipient: { type: "string" }, license: { type: "string" } }, required: ["recipient"] }] } },
+            license: { type: "string", description: "Default license for recipients that do not carry their own." },
+            c2pa: { type: "boolean", default: true },
+          },
+          required: ["recipients"],
+        },
+        IssueBatch: {
+          type: "object",
+          properties: {
+            object: { const: "list" }, asset_id: { type: "string" }, batch_id: { type: "string" },
+            data: { type: "array", items: { oneOf: [{ allOf: [{ type: "object", properties: { status: { const: "ok" } } }, { $ref: "#/components/schemas/IssuanceWithDownload" }] }, { $ref: "#/components/schemas/ItemError" }] } },
+            summary: { type: "object", properties: { total: { type: "integer" }, issued: { type: "integer" }, errors: { type: "integer" } } },
+            manifest: { type: ["object", "null"], properties: { url: { type: ["string", "null"] }, expires_in: { type: "integer" } }, description: "Stored JSON copy of this response, linked for one hour." },
+          },
+        },
         Issuance: { type: "object", properties: { id: { type: "string" }, object: { const: "provenance.issuance" }, asset_id: { type: "string" }, recipient: { type: "string" }, license: { type: ["string", "null"] }, watermark_id: { type: "string" }, delivered_sha256: { type: "string" }, pcm_sha256: { type: ["string", "null"] }, c2pa_signed: { type: "boolean" }, created_at: { type: "string" } } },
         IssuanceWithDownload: { allOf: [{ $ref: "#/components/schemas/Issuance" }, { type: "object", properties: { bytes: { type: "integer" }, download: { type: "object", properties: { url: { type: "string" }, expires_in: { type: "integer" } } } } }] },
         IssuanceList: { type: "object", properties: { object: { const: "list" }, data: { type: "array", items: { $ref: "#/components/schemas/Issuance" } } } },

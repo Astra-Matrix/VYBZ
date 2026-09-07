@@ -275,6 +275,24 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
   );
 
   server.registerTool(
+    "provenance_issue_batch",
+    {
+      title: "Issue copies to many recipients",
+      description:
+        "One call, up to 50 recipients. The original is decoded once and every recipient gets a distinct watermark, a stored copy, and a one-hour download link. Returns each item in order with `status: ok` or an error, a summary, and a `manifest` link to a stored JSON copy of the list. Every successful item counts as one issuance; when the plan runs out mid-batch the rest are reported as `plan_limit_reached`.",
+      inputSchema: {
+        asset_id: z.string().uuid(),
+        recipients: z.array(z.union([z.string().min(1).max(200), z.object({ recipient: z.string().min(1).max(200), license: z.string().max(200).optional() })])).min(1).max(50)
+          .describe("Recipient identifiers, or objects with a per-recipient license"),
+        license: z.string().max(200).optional().describe("Default license for recipients without their own"),
+        c2pa: z.boolean().optional().describe("Attach Content Credentials when the deployment supports it (default true)"),
+      },
+      annotations: METERED,
+    },
+    async (a) => run(() => client.issueBatch(a.asset_id, { recipients: a.recipients, license: a.license, c2pa: a.c2pa })),
+  );
+
+  server.registerTool(
     "provenance_list_issuances",
     { title: "List issuances", description: "Every copy issued for an asset, with recipients and watermark ids.", inputSchema: { asset_id: z.string().uuid() }, annotations: READ },
     async (a) => run(() => client.listIssuances(a.asset_id)),
