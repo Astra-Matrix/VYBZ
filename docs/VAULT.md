@@ -46,7 +46,7 @@ Storage is billed on unique bytes per organization. A sample library shared by e
 
 ## Console
 
-`/console/vault` lists the organization's repositories and creates new ones. A repository page shows branches, the commit history of the selected branch with file counts, sizes, and commit metadata, the complete file list at any commit with per-file downloads, and the changes each commit made against its parent. Branches can be created from any commit. In browsers that support directory access (Chrome and Edge), **Restore to folder** writes a commit's files into a folder on the machine, creating subfolders as needed. Everything the console shows comes from the same `/vault` routes the API and MCP tools use.
+`/console/vault` lists the organization's repositories and creates new ones. A repository page shows branches, the commit history of the selected branch with file counts, sizes, and commit metadata, the complete file list at any commit with per-file downloads, and the changes each commit made against its parent. Branches can be created from any commit. **Add files** hashes the chosen files in the browser, uploads only the bytes the organization lacks (as resumable parts above 200 MB), and commits them on the branch head. In browsers that support directory access (Chrome and Edge), **Restore to folder** writes a commit's files into a folder on the machine, creating subfolders as needed. Everything the console shows comes from the same `/vault` routes the API and MCP tools use.
 
 ## What Vault is not
 
@@ -56,7 +56,7 @@ Storage is billed on unique bytes per organization. A sample library shared by e
 
 ## Limits
 
-- 500 MB per blob request; larger files should be split by the client or delivered by chunked upload (roadmap).
+- 500 MB per blob request. Above that, chunked uploads: 6 MB parts in order, resumable for 24 hours, up to 50 GB per file. The MCP tools and the console switch to chunked uploads automatically for files above 200 MB.
 - 20,000 entries per commit. 5,000 hashes per `exists` call.
 
 Last updated: 2026-09-07

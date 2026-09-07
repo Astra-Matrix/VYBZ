@@ -10,7 +10,8 @@
 // Every response carries X-Request-Id. Every call is written to the
 // organization's audit log. Errors are JSON `{ error: { code, message } }`.
 // deno-lint-ignore-file no-explicit-any
-import { admin } from "../_shared/edge.ts";
+import { admin, STORAGE } from "../_shared/edge.ts";
+import { Sha256 } from "../_shared/sha256.ts";
 import {
   API_VERSION,
   ApiError,
@@ -44,6 +45,9 @@ const PUBLIC_BASE = Deno.env.get("API_PUBLIC_BASE") ?? "https://vybz.cloud/v1";
 
 const MAX_AUDIO_BYTES = 200 * 1_048_576;
 const MAX_BLOB_BYTES = 500 * 1_048_576;
+const UPLOAD_PART_BYTES = 6 * 1_048_576; // Storage's resumable protocol wants 6 MiB parts
+const MAX_CHUNKED_BYTES = 50 * 1024 ** 3;
+const UPLOAD_TTL_HOURS = 24;
 const MAX_BATCH_BYTES = 200 * 1_048_576;
 const MAX_BATCH_ITEMS = 25;
 /** Decoded frames per channel kept for analysis (about 6 min at 44.1 kHz). Bounds memory on the edge. */
@@ -1675,6 +1679,216 @@ async function retryDelivery(ctx: Ctx, id: string, deliveryId: string) {
   return json(deliveryView(data), 202, ctx.headers);
 }
 
+// ── Vault: chunked, resumable uploads ───────────────────────────────────────
+//
+// Files above MAX_BLOB_BYTES arrive as fixed-size parts. The gateway opens a
+// resumable upload on Storage (tus protocol), forwards each part at its offset,
+// and folds the bytes into a running SHA-256 whose state lives on the session
+// row between requests. `complete` compares that digest with the hash the
+// client declared before writing the blob record, so content addressing holds
+// for large files exactly as it does for single-request uploads.
+
+function tusHeaders(extra: Record<string, string>): Record<string, string> {
+  return { Authorization: `Bearer ${STORAGE.key}`, apikey: STORAGE.key, "Tus-Resumable": "1.0.0", ...extra };
+}
+
+async function tusCreate(bucket: string, objectName: string, size: number, mime: string): Promise<string> {
+  const meta = Object.entries({ bucketName: bucket, objectName, contentType: mime, cacheControl: "3600" })
+    .map(([k, v]) => `${k} ${b64utf8(v)}`)
+    .join(",");
+  const res = await fetch(`${STORAGE.url}/storage/v1/upload/resumable`, {
+    method: "POST",
+    headers: tusHeaders({ "Upload-Length": String(size), "Upload-Metadata": meta, "x-upsert": "true" }),
+  });
+  const loc = res.headers.get("location");
+  if (res.status !== 201 || !loc) throw new ApiError(500, "storage_error", `The upload session could not be opened (${res.status}).`);
+  await res.body?.cancel();
+  return new URL(loc, STORAGE.url).toString();
+}
+
+async function tusPatch(url: string, offset: number, bytes: Uint8Array): Promise<void> {
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: tusHeaders({ "Upload-Offset": String(offset), "Content-Type": "application/offset+octet-stream" }),
+    body: bytes as unknown as BodyInit,
+  });
+  await res.body?.cancel();
+  if (res.status === 409) throw new ApiError(409, "part_out_of_order", "Storage expected a different offset. Read the session and resume from `next_part`.");
+  if (res.status === 404 || res.status === 410) throw new ApiError(410, "upload_expired", "The storage session is gone. Open a new upload.");
+  if (!res.ok) throw new ApiError(500, "storage_error", `The part could not be stored (${res.status}).`);
+}
+
+async function tusTerminate(url: string): Promise<void> {
+  try {
+    const res = await fetch(url, { method: "DELETE", headers: tusHeaders({}) });
+    await res.body?.cancel();
+  } catch {
+    // best effort; storage expires abandoned sessions on its own
+  }
+}
+
+function uploadView(u: Record<string, any>) {
+  const parts = Math.ceil(Number(u.size) / Number(u.part_size));
+  const self = `${PUBLIC_BASE}/vault/repos/${u.repo_id}/uploads/${u.id}`;
+  return {
+    object: "vault.upload",
+    id: u.id,
+    repo_id: u.repo_id,
+    sha256: u.sha256,
+    size: Number(u.size),
+    mime: u.mime,
+    part_size: Number(u.part_size),
+    parts,
+    received_bytes: Number(u.received_bytes),
+    next_part: Number(u.next_part),
+    status: u.status,
+    created_at: u.created_at,
+    expires_at: u.expires_at,
+    completed_at: u.completed_at ?? null,
+    links: { self, part: `${self}/parts/{n}`, complete: `${self}/complete` },
+  };
+}
+
+async function getUpload(ctx: Ctx, repoId: string, uploadId: string): Promise<Record<string, any>> {
+  if (!isUuid(uploadId)) throw new ApiError(404, "not_found", "No such upload.");
+  const { data } = await admin.from("vault_uploads").select("*").eq("id", uploadId).eq("org_id", ctx.principal.orgId).eq("repo_id", repoId).maybeSingle();
+  if (!data) throw new ApiError(404, "not_found", "No such upload.");
+  return data;
+}
+
+function blobMime(ctx: Ctx, declared?: unknown): string {
+  const m = (typeof declared === "string" ? declared : ctx.req.headers.get("x-vybz-mime") ?? "").split(";")[0].trim().slice(0, 120);
+  return !m || /form-urlencoded|multipart/i.test(m) ? "application/octet-stream" : m;
+}
+
+async function createUpload(ctx: Ctx, id: string) {
+  requireScope(ctx.principal, "vault:write");
+  const r = await getRepo(ctx, id);
+  await planCheck(ctx, "storage");
+  const body = await readJson<{ sha256?: unknown; size?: unknown; mime?: unknown }>(ctx.req);
+  const sha = String(body.sha256 ?? "").toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(sha)) throw new ApiError(422, "invalid_hash", "`sha256` of the complete file is required; the blob is addressed by it.");
+  const size = Number(body.size);
+  if (!Number.isInteger(size) || size <= 0) throw new ApiError(422, "invalid_size", "`size` must be the file's length in bytes.");
+  if (size > MAX_CHUNKED_BYTES) throw new ApiError(413, "payload_too_large", `Chunked uploads are limited to ${Math.round(MAX_CHUNKED_BYTES / 1024 ** 3)} GB.`);
+  const org = ctx.principal.orgId;
+
+  const { data: existing } = await admin.from("vault_blobs").select("hash,size").eq("org_id", org).eq("hash", sha).maybeSingle();
+  if (existing) return json({ object: "vault.blob", repo_id: r.id, hash: sha, size: Number(existing.size), existed: true }, 200, ctx.headers);
+
+  // Resume an open session for the same bytes rather than starting over.
+  const { data: open } = await admin
+    .from("vault_uploads")
+    .select("*")
+    .eq("org_id", org)
+    .eq("sha256", sha)
+    .eq("status", "open")
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (open && Number(open.size) === size) return json({ ...uploadView(open), resumed: true }, 200, ctx.headers);
+
+  const mime = blobMime(ctx, body.mime);
+  const path = `${org}/${sha.slice(0, 2)}/${sha}`;
+  const tusUrl = await tusCreate(BLOBS, path, size, mime);
+  const { data: row, error } = await admin
+    .from("vault_uploads")
+    .insert({
+      org_id: org,
+      repo_id: r.id,
+      sha256: sha,
+      size,
+      mime,
+      part_size: UPLOAD_PART_BYTES,
+      storage_path: path,
+      tus_url: tusUrl,
+      hash_state: new Sha256().export(),
+      created_by_key: ctx.principal.keyId,
+      expires_at: new Date(Date.now() + UPLOAD_TTL_HOURS * 3600_000).toISOString(),
+    })
+    .select("*")
+    .single();
+  if (error || !row) {
+    await tusTerminate(tusUrl);
+    throw new ApiError(500, "db_error", "The upload session could not be recorded.");
+  }
+  return json(uploadView(row), 201, ctx.headers);
+}
+
+async function showUpload(ctx: Ctx, id: string, uploadId: string) {
+  requireScope(ctx.principal, "vault:read");
+  const r = await getRepo(ctx, id);
+  const u = await getUpload(ctx, r.id, uploadId);
+  return json(uploadView(u), 200, ctx.headers);
+}
+
+async function putPart(ctx: Ctx, id: string, uploadId: string, partStr: string) {
+  requireScope(ctx.principal, "vault:write");
+  const r = await getRepo(ctx, id);
+  const u = await getUpload(ctx, r.id, uploadId);
+  if (u.status !== "open") throw new ApiError(409, "upload_closed", `This upload is ${u.status}.`, { status: u.status });
+  if (new Date(u.expires_at).getTime() < Date.now()) throw new ApiError(410, "upload_expired", "This upload expired. Open a new one.");
+  const n = Number(partStr);
+  const size = Number(u.size);
+  const partSize = Number(u.part_size);
+  const parts = Math.ceil(size / partSize);
+  if (!/^\d+$/.test(partStr) || n >= parts) throw new ApiError(404, "not_found", `Parts are numbered 0 to ${parts - 1}.`);
+  if (n !== Number(u.next_part)) {
+    throw new ApiError(409, "part_out_of_order", `Expected part ${u.next_part} next.`, { expected: Number(u.next_part), received_bytes: Number(u.received_bytes) });
+  }
+  const expected = n === parts - 1 ? size - n * partSize : partSize;
+  const bytes = await readBinary(ctx.req, partSize);
+  ctx.bytesIn = bytes.byteLength;
+  if (bytes.byteLength !== expected) {
+    throw new ApiError(422, "invalid_part_size", `Part ${n} must be exactly ${expected} bytes.`, { expected, received: bytes.byteLength, part_size: partSize });
+  }
+
+  await tusPatch(u.tus_url, n * partSize, bytes);
+  const hasher = Sha256.import(u.hash_state).update(bytes);
+  const { data: updated } = await admin
+    .from("vault_uploads")
+    .update({ received_bytes: n * partSize + bytes.byteLength, next_part: n + 1, hash_state: hasher.export() })
+    .eq("id", u.id)
+    .eq("next_part", n)
+    .select("*")
+    .maybeSingle();
+  if (!updated) throw new ApiError(409, "part_out_of_order", "Another request advanced this upload first. Read the session and resume from `next_part`.");
+  return json({ ...uploadView(updated), part: n }, 200, ctx.headers);
+}
+
+async function completeUpload(ctx: Ctx, id: string, uploadId: string) {
+  requireScope(ctx.principal, "vault:write");
+  const r = await getRepo(ctx, id);
+  const u = await getUpload(ctx, r.id, uploadId);
+  if (u.status === "completed") return json({ object: "vault.blob", repo_id: r.id, hash: u.sha256, size: Number(u.size), mime: u.mime, existed: true }, 200, ctx.headers);
+  if (u.status !== "open") throw new ApiError(409, "upload_closed", `This upload is ${u.status}.`, { status: u.status });
+  if (Number(u.received_bytes) !== Number(u.size)) {
+    throw new ApiError(409, "upload_incomplete", "Not every part has arrived.", { received_bytes: Number(u.received_bytes), size: Number(u.size), next_part: Number(u.next_part) });
+  }
+  const computed = Sha256.import(u.hash_state).digestHex();
+  if (computed !== u.sha256) {
+    await admin.storage.from(BLOBS).remove([u.storage_path]);
+    await admin.from("vault_uploads").update({ status: "failed", completed_at: new Date().toISOString() }).eq("id", u.id);
+    throw new ApiError(409, "checksum_mismatch", "The assembled bytes do not match the declared sha256. The partial object was discarded.", { computed, declared: u.sha256 });
+  }
+  const { error } = await admin.from("vault_blobs").insert({ org_id: ctx.principal.orgId, hash: u.sha256, size: Number(u.size), mime: u.mime, storage_path: u.storage_path });
+  if (error && error.code !== "23505") throw new ApiError(500, "db_error", "The blob record could not be created.");
+  await admin.from("vault_uploads").update({ status: "completed", completed_at: new Date().toISOString(), hash_state: {} }).eq("id", u.id);
+  return json({ object: "vault.blob", repo_id: r.id, hash: u.sha256, size: Number(u.size), mime: u.mime, existed: false }, 201, ctx.headers);
+}
+
+async function abortUpload(ctx: Ctx, id: string, uploadId: string) {
+  requireScope(ctx.principal, "vault:write");
+  const r = await getRepo(ctx, id);
+  const u = await getUpload(ctx, r.id, uploadId);
+  if (u.status === "open") {
+    await tusTerminate(u.tus_url);
+    await admin.from("vault_uploads").update({ status: "aborted", completed_at: new Date().toISOString(), hash_state: {} }).eq("id", u.id);
+  }
+  return json({ object: "vault.upload", id: u.id, aborted: true }, 200, ctx.headers);
+}
+
 // ── Router ──────────────────────────────────────────────────────────────────
 
 async function route(ctx: Ctx): Promise<Response> {
@@ -1718,6 +1932,13 @@ async function route(ctx: Ctx): Promise<Response> {
       if (!p4) return m === "POST" ? uploadBlob(ctx, p2) : methodNotAllowed();
       if (p4 === "exists" && m === "POST") return blobsExist(ctx, p2);
       if (m === "GET") return getBlob(ctx, p2, p4);
+    }
+    if (p3 === "uploads") {
+      const [, , , , , p5, p6] = parts;
+      if (!p4) return m === "POST" ? createUpload(ctx, p2) : methodNotAllowed();
+      if (!p5) return m === "GET" ? showUpload(ctx, p2, p4) : m === "DELETE" ? abortUpload(ctx, p2, p4) : methodNotAllowed();
+      if (p5 === "parts" && p6 && m === "PUT") return putPart(ctx, p2, p4, p6);
+      if (p5 === "complete" && !p6 && m === "POST") return completeUpload(ctx, p2, p4);
     }
     if (p3 === "commits") {
       if (!p4) return m === "POST" ? commit(ctx, p2) : m === "GET" ? history(ctx, p2) : methodNotAllowed();

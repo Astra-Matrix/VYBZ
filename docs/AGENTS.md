@@ -62,7 +62,7 @@ Give it `https://vybz.cloud/v1/openapi.json` and `https://vybz.cloud/llms.txt`. 
 | `webhooks_list`, `webhooks_create`, `webhooks_update`, `webhooks_delete`, `webhooks_test`, `webhook_deliveries` | `org:read` / `webhooks:manage` | Signed event delivery to https endpoints; deliveries with status and retry. |
 | `vault_create_repo`, `vault_list_repos`, `vault_get_repo` | `vault:*` | Repositories. |
 | `vault_history`, `vault_get_commit`, `vault_tree`, `vault_diff`, `vault_branches`, `vault_create_branch` | `vault:read` / `vault:write` | Read and shape the graph. |
-| `vault_blob_exists`, `vault_upload_blob`, `vault_blob_link` | `vault:read` / `vault:write` | Blob-level operations. |
+| `vault_blob_exists`, `vault_upload_blob`, `vault_blob_link` | `vault:read` / `vault:write` | Blob-level operations. Local files above 200 MB are sent as resumable 6 MB parts. |
 | `vault_commit_entries` | `vault:write` | Commit an explicit tree. |
 | `vault_commit_folder` (local) | `vault:write` | Hash a folder, upload only missing bytes, commit. `dry_run` reports first. |
 | `vault_status` (local) | `vault:read` | Added / modified / deleted relative to a ref. |

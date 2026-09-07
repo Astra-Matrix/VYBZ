@@ -11,7 +11,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { readFile, readdir, stat, mkdir, writeFile } from "node:fs/promises";
+import { readFile, readdir, stat, mkdir, writeFile, open as openFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { createHash } from "node:crypto";
 import { join, relative, dirname, resolve, sep, basename } from "node:path";
 import { sha256, VybzApiError, type NamedFile, type VybzClient } from "./client.js";
 
@@ -185,6 +187,40 @@ function decodeInput(input: { url?: string; base64?: string }, allowPrivate: boo
   }
   if (input.url) return fetchBytes(input.url, undefined, allowPrivate);
   throw new Error("Provide `url` or `base64`.");
+}
+
+/** Files at or above this size are hashed as a stream and sent as resumable parts. */
+const LARGE_FILE_BYTES = 200 * 1_048_576;
+
+async function hashFile(abs: string, size: number): Promise<string> {
+  if (size < LARGE_FILE_BYTES) return sha256(new Uint8Array(await readFile(abs)));
+  const h = createHash("sha256");
+  for await (const chunk of createReadStream(abs)) h.update(chunk as Buffer);
+  return h.digest("hex");
+}
+
+async function uploadFile(client: VybzClient, repo: string, abs: string, size: number, hash: string, mime?: string) {
+  if (size < LARGE_FILE_BYTES) return client.uploadBlob(repo, new Uint8Array(await readFile(abs)), mime);
+  const fh = await openFile(abs, "r");
+  try {
+    return await client.uploadBlobChunked(repo, {
+      size,
+      sha256: hash,
+      mime,
+      read: async (offset, length) => {
+        const buf = new Uint8Array(length);
+        let got = 0;
+        while (got < length) {
+          const r = await fh.read(buf, got, length - got, offset + got);
+          if (r.bytesRead === 0) throw new Error(`${abs} changed while uploading.`);
+          got += r.bytesRead;
+        }
+        return buf;
+      },
+    });
+  } finally {
+    await fh.close();
+  }
 }
 
 export function registerTools(server: McpServer, client: VybzClient, opts: ToolOptions): void {
@@ -518,15 +554,19 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
     "vault_upload_blob",
     {
       title: "Upload blob",
-      description: "Upload one file's bytes as a content-addressed blob. Identical bytes are deduplicated across the organization. " + (fs ? "Provide `file`, `url`, or `base64`." : "Provide `url` or `base64`."),
+      description: "Upload one file's bytes as a content-addressed blob. Identical bytes are deduplicated across the organization. " + (fs ? "Provide `file`, `url`, or `base64`. Files above 200 MB are sent as resumable parts." : "Provide `url` or `base64`."),
       inputSchema: { repo: z.string(), file: z.string().optional(), url: z.string().url().optional(), base64: z.string().optional(), mime: z.string().optional() },
       annotations: open(WRITE_IDEMPOTENT),
     },
     async (a) =>
       run(async () => {
         if (!fs && a.file) throw new Error("The hosted server has no filesystem. Pass `url` or `base64`, or run `npx @vybz/mcp-server` locally.");
-        const bytes = fs && a.file ? new Uint8Array(await readFile(guard(opts.roots, a.file))) : await decodeInput(a, fs);
-        return client.uploadBlob(a.repo, bytes, a.mime);
+        if (fs && a.file) {
+          const abs = guard(opts.roots, a.file);
+          const size = (await stat(abs)).size;
+          return uploadFile(client, a.repo, abs, size, await hashFile(abs, size), a.mime);
+        }
+        return client.uploadBlob(a.repo, await decodeInput(a, fs), a.mime);
       }),
   );
 
@@ -560,10 +600,7 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
         const root = guard(opts.roots, a.folder);
         const files = await walk(root);
         const entries: Array<{ path: string; hash: string; size: number; abs: string }> = [];
-        for (const f of files) {
-          const bytes = new Uint8Array(await readFile(f.abs));
-          entries.push({ path: f.path, hash: sha256(bytes), size: f.size, abs: f.abs });
-        }
+        for (const f of files) entries.push({ path: f.path, hash: await hashFile(f.abs, f.size), size: f.size, abs: f.abs });
         const hashes = [...new Set(entries.map((e) => e.hash))];
         const missing = new Set<string>();
         for (let i = 0; i < hashes.length; i += 2000) {
@@ -577,7 +614,7 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
         }
         let uploaded = 0;
         for (const e of toUpload) {
-          await client.uploadBlob(a.repo, new Uint8Array(await readFile(e.abs)));
+          await uploadFile(client, a.repo, e.abs, e.size, e.hash);
           uploaded++;
         }
         const commit = await client.commit(a.repo, {

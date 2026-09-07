@@ -95,6 +95,8 @@ While the key and the Vault values disagree, checkout fails and webhook signatur
 
 **Webhook backlog.** `select status, count(*) from webhook_deliveries group by 1;`. The pg_cron job `webhook-dispatch` runs every minute and the gateway dispatches immediately after each event; `select * from cron.job_run_details where jobid = (select jobid from cron.job where jobname = 'webhook-dispatch') order by start_time desc limit 5;` shows the sweep. Responses arrive through pg_net into `net._http_response` and are reconciled on the next pass. Endpoints that fail six times leave deliveries `failed`; the customer retries them from the console or the API. `webhook-deliveries-prune` drops rows older than 30 days at 04:30 UTC.
 
+**Chunked uploads.** Sessions live in `vault_uploads` and are pruned a day after expiry by the `vault-uploads-prune` cron job. The `vault-blobs` bucket's file size limit (Storage settings) caps what a chunked upload can produce; raise it to match the 50 GB API limit when a customer needs it.
+
 **Rate bucket growth.** `select public.api_rate_buckets_prune();` on a daily schedule (Supabase cron).
 
 **Large detection latency.** Decoding dominates for long files; correlation is one 8192-point FFT per issuance. If an asset exceeds ~5,000 issuances, advise the customer to register per-campaign variants.

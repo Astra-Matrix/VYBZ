@@ -1,12 +1,14 @@
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Plus, Download, GitBranch, HardDriveDownload, ArrowLeft } from "lucide-react";
+import { Plus, Download, GitBranch, HardDriveDownload, ArrowLeft, Upload } from "lucide-react";
+import { Sha256 } from "../../supabase/functions/_shared/sha256.ts";
 import { apiRequest, fmtBytes, fmtDate, slugFromName, type Org } from "./consoleApi";
 
 type Repo = { id: string; name: string; slug: string; description: string | null; daw: string | null; default_branch: string; created_at: string; updated_at: string };
 type Branch = { name: string; head_sha: string | null; updated_at: string };
 type Commit = { id: string; sha: string; parent_sha: string | null; tree_sha: string; message: string; file_count: number; total_bytes: number; meta: Record<string, unknown>; created_at: string };
 type Entry = { path: string; hash: string; size: number };
+type UploadSession = { object: "vault.upload"; id: string; part_size: number; parts: number; received_bytes: number; next_part: number };
 type Diff = { from: string | null; to: string; added: Entry[]; removed: Entry[]; modified: Array<{ path: string; before: string; after: string; size: number }>; summary: { added: number; removed: number; modified: number } };
 
 const DAWS: Array<[string, string]> = [
@@ -202,7 +204,7 @@ function RepoView({ org, ref_ }: { org: Org; ref_: string }) {
       </div>
 
       {tab === "history" ? <History rows={history} sel={sel} onSelect={(sha) => { setSel(sha); setTab("files"); }} /> : null}
-      {tab === "files" && selected ? <Files org={org} repo={repo} commit={selected} /> : null}
+      {tab === "files" && selected ? <Files org={org} repo={repo} commit={selected} branch={branch ?? repo.default_branch} headSha={history?.[0]?.sha ?? null} onCommitted={() => void loadRepo()} /> : null}
       {tab === "changes" && selected ? <Changes org={org} repo={repo} commit={selected} /> : null}
     </>
   );
@@ -246,7 +248,7 @@ function metaLine(meta: Record<string, unknown>): string {
 type DirHandle = { getDirectoryHandle: (name: string, o?: { create: boolean }) => Promise<DirHandle>; getFileHandle: (name: string, o?: { create: boolean }) => Promise<{ createWritable: () => Promise<{ write: (b: Blob) => Promise<void>; close: () => Promise<void> }> }> };
 const canRestore = () => typeof (window as unknown as { showDirectoryPicker?: unknown }).showDirectoryPicker === "function";
 
-function Files({ org, repo, commit }: { org: Org; repo: Repo; commit: Commit }) {
+function Files({ org, repo, commit, branch, headSha, onCommitted }: { org: Org; repo: Repo; commit: Commit; branch: string; headSha: string | null; onCommitted: () => void }) {
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [filter, setFilter] = useState("");
   const [err, setErr] = useState<string | null>(null);
@@ -322,6 +324,7 @@ function Files({ org, repo, commit }: { org: Org; repo: Repo; commit: Commit }) 
           </button>
         ) : null}
       </div>
+      <AddFiles org={org} repo={repo} branch={branch} headSha={headSha} onCommitted={onCommitted} />
       {restore ? (
         <div className={`vz-alert ${restore.done < restore.total ? "info" : restore.failed.length ? "err" : "ok"}`} style={{ marginBottom: 10 }}>
           {restore.done < restore.total ? `Restoring ${restore.done} of ${restore.total}…` : restore.failed.length ? `Restored ${restore.total - restore.failed.length} of ${restore.total}. Failed: ${restore.failed.slice(0, 5).join(", ")}${restore.failed.length > 5 ? "…" : ""}` : `Restored ${restore.total} files.`}
@@ -347,6 +350,106 @@ function Files({ org, repo, commit }: { org: Org; repo: Repo; commit: Commit }) 
         </div>
       )}
     </>
+  );
+}
+
+// ── Add files from the browser ───────────────────────────────────────────────
+//
+// Hashes each file in slices, asks which hashes the organization lacks, uploads
+// only those (single request under 200 MB, resumable 6 MB parts above), and
+// commits the branch head's tree with the new entries merged in by path.
+
+const LARGE_FILE_BYTES = 200 * 1_048_576;
+const HASH_SLICE = 8 * 1_048_576;
+
+async function hashFile(f: File): Promise<string> {
+  const h = new Sha256();
+  for (let off = 0; off < f.size; off += HASH_SLICE) h.update(new Uint8Array(await f.slice(off, Math.min(off + HASH_SLICE, f.size)).arrayBuffer()));
+  return h.digestHex();
+}
+
+function relPath(f: File): string {
+  const p = ((f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name).replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/^\/+/, "");
+  return p.split("/").filter((seg) => seg && seg !== "..").join("/");
+}
+
+function AddFiles({ org, repo, branch, headSha, onCommitted }: { org: Org; repo: Repo; branch: string; headSha: string | null; onCommitted: () => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const JSON_H = { "Content-Type": "application/json" };
+
+  async function uploadChunked(f: File, hash: string) {
+    const opened = await apiRequest<UploadSession | { object: "vault.blob" }>(org.id, "POST", `/vault/repos/${repo.id}/uploads`, JSON.stringify({ sha256: hash, size: f.size, mime: f.type || undefined }), JSON_H);
+    if (opened.object === "vault.blob") return;
+    let s = opened;
+    while (s.next_part < s.parts) {
+      const off = s.next_part * s.part_size;
+      const slice = f.slice(off, Math.min(off + s.part_size, f.size));
+      s = await apiRequest<UploadSession>(org.id, "PUT", `/vault/repos/${repo.id}/uploads/${s.id}/parts/${s.next_part}`, slice, { "Content-Type": "application/octet-stream" });
+      setMsg(`Uploading ${relPath(f)}: ${fmtBytes(s.received_bytes)} of ${fmtBytes(f.size)}`);
+    }
+    await apiRequest(org.id, "POST", `/vault/repos/${repo.id}/uploads/${s.id}/complete`);
+  }
+
+  async function onPick(e: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (!files.length) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const picked: Array<{ file: File; path: string; hash: string }> = [];
+      for (const [i, f] of files.entries()) {
+        setMsg(`Hashing ${i + 1} of ${files.length}: ${f.name}`);
+        picked.push({ file: f, path: relPath(f), hash: await hashFile(f) });
+      }
+      const hashes = [...new Set(picked.map((p) => p.hash))];
+      const missing = new Set<string>();
+      for (let i = 0; i < hashes.length; i += 2000) {
+        const r = await apiRequest<{ missing: string[] }>(org.id, "POST", `/vault/repos/${repo.id}/blobs/exists`, JSON.stringify({ hashes: hashes.slice(i, i + 2000) }), JSON_H);
+        for (const h of r.missing) missing.add(h);
+      }
+      const sent = new Set<string>();
+      for (const p of picked) {
+        if (!missing.has(p.hash) || sent.has(p.hash)) continue;
+        sent.add(p.hash);
+        if (p.file.size < LARGE_FILE_BYTES) {
+          setMsg(`Uploading ${p.path}`);
+          await apiRequest(org.id, "POST", `/vault/repos/${repo.id}/blobs`, p.file, { "Content-Type": p.file.type || "application/octet-stream", "X-VYBZ-Content-SHA256": p.hash });
+        } else {
+          await uploadChunked(p.file, p.hash);
+        }
+      }
+      let base: Entry[] = [];
+      if (headSha) base = (await apiRequest<{ entries: Entry[] }>(org.id, "GET", `/vault/repos/${repo.id}/commits/${headSha}`)).entries;
+      const tree = new Map(base.map((en) => [en.path, en]));
+      for (const p of picked) tree.set(p.path, { path: p.path, hash: p.hash, size: p.file.size });
+      setMsg("Committing…");
+      await apiRequest(org.id, "POST", `/vault/repos/${repo.id}/commits`, JSON.stringify({
+        branch, parent: headSha, entries: [...tree.values()], meta: { source: "console" },
+        message: `Add ${picked.length} ${picked.length === 1 ? "file" : "files"}`,
+      }), JSON_H);
+      setMsg(`Committed ${picked.length} ${picked.length === 1 ? "file" : "files"} to ${branch}. ${sent.size} uploaded, ${picked.length - sent.size} already stored.`);
+      onCommitted();
+    } catch (e2) {
+      setErr(e2 instanceof Error ? e2.message : String(e2));
+      setMsg(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
+      <input ref={input} type="file" multiple hidden onChange={(e) => void onPick(e)} />
+      <button type="button" className="vz-btn vz-btn-ghost vz-btn-sm" disabled={busy} onClick={() => input.current?.click()} title={`Upload files and commit them on ${branch}`}>
+        <Upload size={13} /> {busy ? "Working…" : "Add files"}
+      </button>
+      {msg ? <span className="vz-muted" style={{ fontSize: 12.5 }}>{msg}</span> : null}
+      {err ? <span className="vz-alert err" style={{ padding: "4px 10px", fontSize: 12.5 }}>{err}</span> : null}
+    </div>
   );
 }
 

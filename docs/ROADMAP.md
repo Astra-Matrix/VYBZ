@@ -7,7 +7,7 @@ Ordered by revenue impact. Dates are targets, not promises.
 - **Billing.** Shipped 2026-09-06: Business subscription, developer caps, members, invites, and monthly overage invoice items. Usage history in the console, `GET /billing/usage`, and `vybz_billing_usage` shipped 2026-09-06.
 - **Compressed input.** Shipped 2026-09-07: WAV, AIFF, FLAC, MP3, Ogg Vorbis, and Opus decode in the edge; AAC/M4A, ALAC, MP4, MOV, WebM through the decode worker. Suspects are resampled to the asset's rate. Remaining: host the decode worker.
 - **Verification evidence.** Shipped 2026-09-07: exact hash, PCM hash, perceptual fingerprint with offset, Content Credentials check, and opt-in watermark attribution, in one call. Batches of 25 files or URLs. Console Verify page.
-- **Chunked blob upload.** Resumable uploads for files above 500 MB.
+- **Chunked blob upload.** Shipped 2026-09-07: upload sessions with 6 MB parts, resumable for 24 hours, up to 50 GB, verified against the declared hash as the parts pass. The MCP tools and the console use it automatically above 200 MB.
 - **Batch issue.** Shipped 2026-09-07: `POST /provenance/assets/{id}/issue/batch`, up to 50 recipients, a link per recipient and a stored manifest of links. Console Assets page for registering, issuing, and reviewing issuances.
 - **Vault console.** Shipped 2026-09-07: repositories, branches, history, file lists with downloads, per-commit changes, and restore to a local folder in browsers with directory access.
 - **Webhooks.** Shipped 2026-09-07: `asset.registered`, `issuance.created`, `detection.completed`, `detection.attributed`, `commit.created` with HMAC signatures, retries, delivery log, console page, and MCP tools.

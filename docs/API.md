@@ -12,7 +12,7 @@ Base URL `https://vybz.cloud/v1`. Machine-readable: [`/v1/openapi.json`](https:/
 - **Audio in:** any format for verify and detect (WAV, AIFF, FLAC, MP3, Ogg Vorbis, Opus in the edge; AAC/M4A, ALAC, MP4, MOV, WebM through the decode worker). Lossless only for registration. `GET /provenance/formats` reports the live list.
 - **Console sessions:** the console calls the same API with the member's session JWT plus `X-VYBZ-Org`. Integrations use keys.
 - **Binary out:** watermarked copies return `audio/wav` by default; send `Accept: application/json` for a stored copy and a one-hour link.
-- **Size limits:** audio 200 MB, blobs 500 MB per request. Batches: 25 files, 200 MB total. Analysis decodes up to about six minutes per file at 44.1 kHz and reports `truncated` beyond that.
+- **Size limits:** audio 200 MB, blobs 500 MB per request (50 GB through chunked uploads). Batches: 25 files, 200 MB total. Analysis decodes up to about six minutes per file at 44.1 kHz and reports `truncated` beyond that.
 - **Versioning:** `X-VYBZ-Api-Version` reports the contract date. Breaking changes ship as a new date and are announced 90 days ahead.
 
 ## Error codes
@@ -24,7 +24,7 @@ Base URL `https://vybz.cloud/v1`. Machine-readable: [`/v1/openapi.json`](https:/
 | 403 | `insufficient_scope`, `not_a_member` | Key lacks the required scope (`required_scope` in extra); or the session user is not in the organization. |
 | 404 | `not_found`, `route_not_found` | Object not in this organization, or no such route. |
 | 405 | `method_not_allowed` | |
-| 409 | `checksum_mismatch`, `slug_taken`, `missing_blobs`, `head_moved`, `branch_exists` | Conflict; the extra fields say what to fix. |
+| 409 | `checksum_mismatch`, `slug_taken`, `missing_blobs`, `head_moved`, `branch_exists`, `part_out_of_order`, `upload_incomplete`, `upload_closed` | Conflict; the extra fields say what to fix. |
 | 413 | `payload_too_large` | |
 | 415 | `unsupported_media_type` | JSON or multipart expected. |
 | 422 | `unsupported_audio`, `undecodable_audio`, `lossless_required`, `invalid_url`, `url_not_allowed`, `fetch_failed`, `too_many_items`, `invalid_multipart`, `invalid_events`, `too_many_endpoints`, `invalid_recipient`, `invalid_entries`, `invalid_path`, `invalid_hash`, `invalid_branch`, … | Validation. Audio errors carry `supported` (formats) in extra. |
@@ -183,6 +183,16 @@ JSON `{ "hashes": [sha256…] }` (max 5000) → `{ "present": [], "missing": [] 
 ### `POST /vault/repos/{repo}/blobs` — `vault:write`
 Body: raw bytes. Headers: optional `X-VYBZ-Content-SHA256` (rejected on mismatch), `X-VYBZ-Mime`.
 Returns `{ hash, size, existed }`. Blobs are deduplicated across the whole organization.
+
+### Chunked uploads — `vault:write`
+For files above 500 MB, up to 50 GB. Declare the file, send fixed-size parts in order, then complete:
+
+- `POST /vault/repos/{repo}/uploads` JSON `{ "sha256", "size", "mime"? }` → `201` session `{ id, part_size, parts, next_part, expires_at, links }`. If the blob already exists: `200` blob with `existed: true`. If a session for the same hash is open: `200` that session with `resumed: true`.
+- `PUT /vault/repos/{repo}/uploads/{id}/parts/{n}` raw bytes, exactly `part_size` bytes except the last part. Parts must arrive in order; `409 part_out_of_order` carries `expected`. `422 invalid_part_size` carries `expected` and `received`.
+- `POST /vault/repos/{repo}/uploads/{id}/complete` → `201` blob. `409 upload_incomplete` lists `received_bytes` and `next_part`; `409 checksum_mismatch` means the assembled bytes did not hash to the declared value and the partial object was discarded.
+- `GET /vault/repos/{repo}/uploads/{id}` reads the session to resume; `DELETE` aborts it.
+
+`part_size` is 6 MB. Sessions expire after 24 hours. The gateway hashes every part as it passes, so the blob record is only written once the declared hash is confirmed.
 
 ### `GET /vault/repos/{repo}/blobs/{hash}` — `vault:read`
 `{ hash, size, mime, download: { url, expires_in: 900 } }`.

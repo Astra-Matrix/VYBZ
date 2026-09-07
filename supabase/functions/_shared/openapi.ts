@@ -168,13 +168,43 @@ export function openapiDocument(base: string) {
       "/vault/repos/{repo}/blobs": {
         post: {
           tags: ["Vault"], summary: "Upload a blob (content-addressed)",
-          description: "Send raw bytes. The SHA-256 is computed server-side and the blob is deduplicated across the organization. Send `X-VYBZ-Content-SHA256` to have the upload rejected on mismatch.",
+          description: "Send raw bytes, up to 500 MB. The SHA-256 is computed server-side and the blob is deduplicated across the organization. Send `X-VYBZ-Content-SHA256` to have the upload rejected on mismatch. Larger files go through `/uploads`.",
           parameters: [idParam("repo", "Repo id or slug"), { name: "X-VYBZ-Content-SHA256", in: "header", schema: { type: "string" } }, { name: "X-VYBZ-Mime", in: "header", schema: { type: "string" } }],
           requestBody: { required: true, content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } } },
           responses: { "201": jsonOf("Blob"), "200": jsonOf("Blob", "Already stored"), "402": err("Plan limit reached") },
         },
       },
       "/vault/repos/{repo}/blobs/exists": { post: { tags: ["Vault"], summary: "Check which hashes are missing", parameters: [idParam("repo", "Repo id or slug")], requestBody: { required: true, content: { "application/json": { schema: { type: "object", properties: { hashes: { type: "array", items: { type: "string" } } }, required: ["hashes"] } } } }, responses: { "200": { description: "{ present[], missing[] }" } } } },
+      "/vault/repos/{repo}/uploads": {
+        post: {
+          tags: ["Vault"], summary: "Open a chunked upload",
+          description: "For files above the single-request limit. Declare the complete file's `sha256` and `size`; the response gives `part_size` and `parts`. Send parts in order with PUT, then `complete`. If a blob with that hash already exists the response is the blob with `existed: true`. Re-opening for the same hash while a session is open returns that session (`resumed: true`) with `next_part` to continue from. Sessions expire after 24 hours.",
+          parameters: [c("repo", "Repo id or slug")],
+          requestBody: { required: true, content: { "application/json": { schema: { type: "object", properties: { sha256: { type: "string" }, size: { type: "integer" }, mime: { type: "string" } }, required: ["sha256", "size"] } } } },
+          responses: { "201": jsonOf("Upload", "Session opened"), "200": { description: "Existing blob, or an open session to resume" }, "413": err("Above the chunked limit"), "402": err("Plan limit reached") },
+        },
+      },
+      "/vault/repos/{repo}/uploads/{upload}": {
+        get: { tags: ["Vault"], summary: "Upload session status", parameters: [c("repo", "Repo id or slug"), c("upload", "Upload id")], responses: { "200": jsonOf("Upload"), "404": err("Not found") } },
+        delete: { tags: ["Vault"], summary: "Abort an upload", parameters: [c("repo", "Repo id or slug"), c("upload", "Upload id")], responses: { "200": { description: "{ id, aborted: true }" } } },
+      },
+      "/vault/repos/{repo}/uploads/{upload}/parts/{n}": {
+        put: {
+          tags: ["Vault"], summary: "Send one part",
+          description: "Raw bytes of part `n` (zero-based). Every part is exactly `part_size` bytes except the last. Parts must arrive in order; `409 part_out_of_order` carries the `expected` part so a client can resume.",
+          parameters: [c("repo", "Repo id or slug"), c("upload", "Upload id"), c("n", "Part number")],
+          requestBody: { required: true, content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } } },
+          responses: { "200": jsonOf("Upload", "Part stored"), "409": err("`part_out_of_order`, `upload_closed`"), "410": err("`upload_expired`"), "422": err("`invalid_part_size`") },
+        },
+      },
+      "/vault/repos/{repo}/uploads/{upload}/complete": {
+        post: {
+          tags: ["Vault"], summary: "Finish a chunked upload",
+          description: "Verifies that every part arrived and that the assembled bytes hash to the declared sha256, then records the blob. On a mismatch the partial object is discarded and `409 checksum_mismatch` reports the computed hash.",
+          parameters: [c("repo", "Repo id or slug"), c("upload", "Upload id")],
+          responses: { "201": jsonOf("Blob", "Blob recorded"), "200": jsonOf("Blob", "Already completed"), "409": err("`upload_incomplete`, `checksum_mismatch`, `upload_closed`") },
+        },
+      },
       "/vault/repos/{repo}/blobs/{hash}": { get: { tags: ["Vault"], summary: "Get a 15-minute download link for a blob", parameters: [idParam("repo", "Repo id or slug"), idParam("hash", "SHA-256")], responses: { "200": jsonOf("BlobDownload"), "404": err("Not found") } } },
       "/vault/repos/{repo}/commits": {
         post: {
@@ -263,6 +293,14 @@ export function openapiDocument(base: string) {
         RepoCreate: { type: "object", properties: { name: { type: "string" }, slug: { type: "string" }, description: { type: "string" }, daw: { type: "string", description: "e.g. ableton, fl-studio, logic, pro-tools, cubase, reaper, bitwig" }, default_branch: { type: "string", default: "main" } }, required: ["name"] },
         Repo: { type: "object", properties: { id: { type: "string" }, object: { const: "vault.repo" }, name: { type: "string" }, slug: { type: "string" }, description: { type: ["string", "null"] }, daw: { type: ["string", "null"] }, default_branch: { type: "string" }, created_at: { type: "string" }, updated_at: { type: "string" }, links: { type: "object" } } },
         RepoList: { type: "object", properties: { object: { const: "list" }, data: { type: "array", items: { $ref: "#/components/schemas/Repo" } } } },
+        Upload: {
+          type: "object",
+          properties: {
+            object: { const: "vault.upload" }, id: { type: "string" }, repo_id: { type: "string" }, sha256: { type: "string" }, size: { type: "integer" }, mime: { type: "string" },
+            part_size: { type: "integer" }, parts: { type: "integer" }, received_bytes: { type: "integer" }, next_part: { type: "integer" },
+            status: { type: "string", enum: ["open", "completed", "failed", "aborted"] }, created_at: { type: "string" }, expires_at: { type: "string" }, completed_at: { type: ["string", "null"] }, links: { type: "object" },
+          },
+        },
         Blob: { type: "object", properties: { object: { const: "vault.blob" }, hash: { type: "string" }, size: { type: "integer" }, existed: { type: "boolean" } } },
         BlobDownload: { type: "object", properties: { object: { const: "vault.blob" }, hash: { type: "string" }, size: { type: "integer" }, mime: { type: ["string", "null"] }, download: { type: "object", properties: { url: { type: "string" }, expires_in: { type: "integer" } } } } },
         Entry: { type: "object", properties: { path: { type: "string" }, hash: { type: "string" }, size: { type: "integer" } }, required: ["path", "hash", "size"] },

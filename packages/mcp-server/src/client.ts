@@ -35,6 +35,8 @@ export class VybzApiError extends Error {
 /** Reserved keys of the API error envelope; everything else is a detail. */
 const ENVELOPE_KEYS = new Set(["code", "message", "request_id", "docs"]);
 
+export type UploadSession = { object: "vault.upload"; id: string; sha256: string; size: number; part_size: number; parts: number; received_bytes: number; next_part: number; status: string; expires_at: string };
+
 export function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
@@ -180,6 +182,45 @@ export class VybzClient {
     const headers: Record<string, string> = { "X-VYBZ-Content-SHA256": sha256(bytes) };
     if (mime) headers["X-VYBZ-Mime"] = mime;
     return this.call<{ hash: string; size: number; existed: boolean }>("POST", `/vault/repos/${encodeURIComponent(repo)}/blobs`, { body: bytes, headers });
+  }
+  createUpload(repo: string, req: { sha256: string; size: number; mime?: string }) {
+    return this.call<UploadSession | { object: "vault.blob"; hash: string; size: number; existed: boolean }>("POST", `/vault/repos/${encodeURIComponent(repo)}/uploads`, { json: req });
+  }
+  uploadPart(repo: string, id: string, n: number, bytes: Uint8Array) {
+    return this.call<UploadSession>("PUT", `/vault/repos/${encodeURIComponent(repo)}/uploads/${id}/parts/${n}`, { body: bytes });
+  }
+  completeUpload(repo: string, id: string) {
+    return this.call<{ hash: string; size: number; existed: boolean }>("POST", `/vault/repos/${encodeURIComponent(repo)}/uploads/${id}/complete`);
+  }
+  abortUpload(repo: string, id: string) { return this.call<{ id: string; aborted: boolean }>("DELETE", `/vault/repos/${encodeURIComponent(repo)}/uploads/${id}`); }
+  /**
+   * Upload a large file as resumable parts. `read` returns exactly `length`
+   * bytes from `offset`. Transient (5xx) part failures are retried; an
+   * out-of-order answer re-reads the session and continues from `next_part`.
+   */
+  async uploadBlobChunked(repo: string, src: { size: number; sha256: string; mime?: string; read: (offset: number, length: number) => Promise<Uint8Array> }, onProgress?: (sent: number, total: number) => void) {
+    const opened = await this.createUpload(repo, { sha256: src.sha256, size: src.size, mime: src.mime });
+    if (opened.object === "vault.blob") return opened;
+    let s: UploadSession = opened;
+    while (s.next_part < s.parts) {
+      const n = s.next_part;
+      const offset = n * s.part_size;
+      const length = Math.min(s.part_size, src.size - offset);
+      const bytes = await src.read(offset, length);
+      try {
+        s = await this.uploadPart(repo, s.id, n, bytes);
+      } catch (e) {
+        if (e instanceof VybzApiError && e.code === "part_out_of_order") {
+          s = await this.call<UploadSession>("GET", `/vault/repos/${encodeURIComponent(repo)}/uploads/${s.id}`);
+          continue;
+        }
+        if (e instanceof VybzApiError && e.status >= 500) {
+          s = await this.uploadPart(repo, s.id, n, bytes); // one retry for a transient storage error
+        } else throw e;
+      }
+      onProgress?.(s.received_bytes, src.size);
+    }
+    return this.completeUpload(repo, s.id);
   }
   blobLink(repo: string, hash: string) { return this.call<{ download: { url: string } ; size: number }>("GET", `/vault/repos/${encodeURIComponent(repo)}/blobs/${hash}`); }
   commit(repo: string, req: { branch?: string; message?: string; entries: { path: string; hash: string; size: number }[]; parent?: string | null; meta?: Record<string, unknown> }) {
