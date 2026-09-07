@@ -67,11 +67,44 @@ Nothing secret is ever prefixed `VITE_`.
 
 ## Decode worker
 
-`worker/decode` is a Node service that runs ffmpeg. `docker compose up -d --build` with `WORKER_TOKEN` set, then point `DECODE_WORKER_URL` and `DECODE_WORKER_TOKEN` at it. It accepts up to 200 MB per request, caps decoded duration with `X-VYBZ-Max-Seconds`, and answers 32-bit float WAV. Health at `/healthz`. It never stores input; files are written to a temp directory for ffmpeg to seek and deleted after each request.
+`worker/decode` is a Node service that runs ffmpeg. It accepts up to 200 MB per request, caps decoded duration with `X-VYBZ-Max-Seconds`, and answers 32-bit float WAV. Health at `/healthz`. It never stores input; files are written to a temp directory for ffmpeg to seek and deleted after each request.
+
+Hosted on Fly.io as one always-on machine in `sjc`, next to the Supabase project. `worker/decode/fly.toml` carries the whole configuration. First deploy, from a machine with `flyctl` signed in (`fly auth login`):
+
+```sh
+cd worker/decode
+fly apps create vybz-decode
+fly secrets set WORKER_TOKEN=$(openssl rand -hex 24) --app vybz-decode   # keep the value; the gateway needs it
+fly deploy --app vybz-decode
+curl https://vybz-decode.fly.dev/healthz
+```
+
+Then tell the gateway where it is. With a Supabase personal access token in `SUPABASE_ACCESS_TOKEN`:
+
+```sh
+npm run secrets:set -- DECODE_WORKER_URL=https://vybz-decode.fly.dev DECODE_WORKER_TOKEN=<the token above>
+```
+
+No redeploy is needed; edge functions read secrets on each invocation. Confirm with `GET /v1/provenance/formats`: `decode.worker_configured` turns `true` and the worker formats appear under `verify` and `detect`. Later deploys are `fly deploy --app vybz-decode` from `worker/decode`. Local alternative: `docker compose up -d --build` with `WORKER_TOKEN` set.
 
 ## C2PA worker
 
-Container on any glibc 2.39+ host (Ubuntu 24.04 image). `docker compose up -d --build` in `worker/c2pa` with `WORKER_TOKEN` set. A self-signed ES256 certificate is generated on first boot; production installs a CA-issued certificate into the `c2pa-certs` volume.
+Container on any glibc 2.39+ host (Ubuntu 24.04 image). `worker/c2pa/fly.toml` runs it on Fly.io with a 1 GB volume for the certificate:
+
+```sh
+cd worker/c2pa
+fly apps create vybz-c2pa
+fly volumes create c2pa_certs --size 1 --region sjc --app vybz-c2pa
+fly secrets set WORKER_TOKEN=$(openssl rand -hex 24) --app vybz-c2pa
+fly deploy --app vybz-c2pa
+npm run secrets:set -- C2PA_WORKER_URL=https://vybz-c2pa.fly.dev C2PA_WORKER_TOKEN=<the token>
+```
+
+A self-signed ES256 certificate is generated into the volume on first boot, which marks copies as signed by an untrusted issuer. Production installs a CA-issued certificate into the volume (`fly ssh console --app vybz-c2pa`, replace the files under `/certs`, restart). Local alternative: `docker compose up -d --build` in `worker/c2pa`.
+
+## Edge function inventory
+
+Four functions belong to the platform: `api-v1`, `billing-checkout`, `billing-usage-report`, `stripe-webhook`. Everything else in the project is the retired creator application or a temporary probe and can be deleted at any time; their tables are inert. `npm run functions:list` shows what is deployed and `npm run functions:retire` deletes the legacy set in one pass (both need `SUPABASE_ACCESS_TOKEN`). `npm run secrets:set -- NAME=value` sets edge secrets the same way.
 
 ## Stripe modes
 

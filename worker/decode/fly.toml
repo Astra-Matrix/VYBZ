@@ -1,0 +1,38 @@
+# VYBZ decode worker on Fly.io.
+#   fly apps create vybz-decode
+#   fly secrets set WORKER_TOKEN=<random 48 hex> --app vybz-decode
+#   fly deploy --app vybz-decode
+# One always-on machine near the Supabase project (us-west-1 → sjc). ffmpeg is
+# CPU-bound, so a shared-cpu-2x with 1 GB handles a 200 MB input comfortably.
+app = "vybz-decode"
+primary_region = "sjc"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8788"
+  MAX_BYTES = "209715200"
+
+[http_service]
+  internal_port = 8788
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 4
+    hard_limit = 8
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/healthz"
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "1gb"

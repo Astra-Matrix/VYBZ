@@ -1,0 +1,43 @@
+# VYBZ Content Credentials signer on Fly.io.
+#   fly apps create vybz-c2pa
+#   fly volumes create c2pa_certs --size 1 --region sjc --app vybz-c2pa
+#   fly secrets set WORKER_TOKEN=<random 48 hex> --app vybz-c2pa
+#   fly deploy --app vybz-c2pa
+# A self-signed ES256 certificate is generated into the volume on first boot.
+# Production replaces it with a CA-issued certificate (see docs/OPERATIONS.md).
+app = "vybz-c2pa"
+primary_region = "sjc"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8787"
+  CERT_DIR = "/certs"
+
+[mounts]
+  source = "c2pa_certs"
+  destination = "/certs"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 4
+    hard_limit = 8
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "15s"
+    method = "GET"
+    path = "/healthz"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

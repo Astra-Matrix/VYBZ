@@ -19,7 +19,10 @@
     "mcp:build": "tsc -p packages/mcp-server/tsconfig.json",
     "mcp:dev": "node --experimental-strip-types packages/mcp-server/src/index.ts",
     "api:deploy": "node scripts/deploy-api.mjs",
-    "api:deploy:cli": "supabase functions deploy api-v1 --no-verify-jwt"
+    "api:deploy:cli": "supabase functions deploy api-v1 --no-verify-jwt",
+    "secrets:set": "node scripts/supabase-admin.mjs secrets set",
+    "functions:list": "node scripts/supabase-admin.mjs functions list",
+    "functions:retire": "node scripts/supabase-admin.mjs functions delete vybz-probe stripe-whoami push-send passkey embed watermark watermark-detect bunny-upload bunny-sign stripe-connect-onboard stripe-tip bunny-live oauth-start oauth-callback ice-servers stripe-credit-topup weekly-digest livekit-token vc-room-renewals audio-play waitlist-join waitlist-notify storefront-pack-copy storefront-pack-art storefront-checkout visual-generate cost-alert ai-mastering ai-metadata ai-topup processing-enqueue vibes-radio alpha-key"
   },
   "dependencies": {
     "@fontsource/lexend": "^5.3.0",
