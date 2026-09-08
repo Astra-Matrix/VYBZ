@@ -4,6 +4,7 @@ Ordered by revenue impact. Dates are targets, not promises.
 
 ## Now (Q4 2026)
 
+- **Leak reports.** Shipped 2026-09-08: `POST /provenance/reports` stores a verification with attribution and serves it as JSON and PDF with an integrity hash; console Leak reports page with a drop zone and a detail view; MCP `provenance_leak_report`, `provenance_list_reports`, `provenance_get_report`. Home page, console overview, and plan names now lead with leak forensics for managers, labels, and studios.
 - **Billing.** Shipped 2026-09-06: Business subscription, developer caps, members, invites, and monthly overage invoice items. Usage history in the console, `GET /billing/usage`, and `vybz_billing_usage` shipped 2026-09-06.
 - **Compressed input.** Shipped 2026-09-07: WAV, AIFF, FLAC, MP3, Ogg Vorbis, and Opus decode in the edge; AAC/M4A, ALAC, MP4, MOV, WebM through the decode worker. Suspects are resampled to the asset's rate. Hosting: Fly.io configuration for the decode and Content Credentials workers shipped 2026-09-07 (`worker/*/fly.toml`); the first deploy is a one-time step in the operations doc.
 - **Verification evidence.** Shipped 2026-09-07: exact hash, PCM hash, perceptual fingerprint with offset, Content Credentials check, and opt-in watermark attribution, in one call. Batches of 25 files or URLs. Console Verify page.
@@ -31,4 +32,4 @@ Ordered by revenue impact. Dates are targets, not promises.
 - A marketplace.
 - DRM. Provenance is attribution; it does not stop playback or copying.
 
-Last updated: 2026-09-07
+Last updated: 2026-09-08

@@ -464,6 +464,80 @@ export function registerTools(server: McpServer, client: VybzClient, opts: ToolO
     async (a) => run(() => (a.retry_delivery_id ? client.retryDelivery(a.id, a.retry_delivery_id) : client.webhookDeliveries(a.id, a.status, a.limit ?? 50))),
   );
 
+  // ── Leak reports ──────────────────────────────────────────────────────────
+  server.registerTool(
+    "provenance_leak_report",
+    {
+      title: "Create a leak report",
+      description:
+        "The document to forward when a copy leaks. Verifies one suspect file with attribution on, stores the finding, and returns the report: verdict, confidence, the recipient of the matching copy, every method that ran, and an integrity hash. `links.pdf` is the printable version. " +
+        FORMATS + " Metered as one detection when attribution runs. One file per call: `file`, `url`, or `base64`. If you know a recipient was named, quote the recipient, the confidence, and the report id back to the user.",
+      inputSchema: {
+        file: inputSchema.file,
+        url: inputSchema.url,
+        base64: inputSchema.base64,
+        note: z.string().max(2000).optional().describe("Where the file was found and when; printed on the report."),
+        asset_id: z.string().uuid().optional().describe("Test the watermark against this asset when the file cannot be identified by fingerprint."),
+        pdf_output_file: z.string().optional().describe(fs ? "Also save the PDF to this local path." : "Not available on the hosted server"),
+      },
+      annotations: open(METERED),
+    },
+    async (a) =>
+      run(async () => {
+        const { files, urls } = await gather({ file: a.file, url: a.url, base64: a.base64 });
+        let bytes: Uint8Array; let name: string;
+        if (files.length) { bytes = files[0].bytes; name = files[0].name; }
+        else if (urls.length) {
+          const res = await fetch(urls[0].url);
+          if (!res.ok) throw new ItemError("fetch_failed", `The URL returned ${res.status}.`);
+          bytes = new Uint8Array(await res.arrayBuffer());
+          name = basename(new URL(urls[0].url).pathname) || "url";
+        } else throw new ItemError("no_input", "Pass `file`, `url`, or `base64`.");
+        const report = await client.createReport(bytes, { name, note: a.note, asset: a.asset_id, attribute: true });
+        if (fs && a.pdf_output_file) {
+          const pdf = await client.getReportPdf(String(report.id));
+          const out = guard(opts.roots, a.pdf_output_file);
+          await mkdir(dirname(out), { recursive: true });
+          await writeFile(out, pdf);
+          return { ...report, pdf_file: out };
+        }
+        return report;
+      }),
+  );
+
+  server.registerTool(
+    "provenance_list_reports",
+    {
+      title: "List leak reports",
+      description: "Stored leak reports, newest first. Optional `asset_id` filters to one original.",
+      inputSchema: { asset_id: z.string().uuid().optional(), limit: z.number().int().min(1).max(200).optional() },
+      annotations: READ,
+    },
+    async (a) => run(() => client.listReports({ asset: a.asset_id, limit: a.limit })),
+  );
+
+  server.registerTool(
+    "provenance_get_report",
+    {
+      title: "Get a leak report",
+      description: "One stored report as JSON, with `links.pdf` for the printable version. Optionally save the PDF locally with `pdf_output_file`.",
+      inputSchema: { report_id: z.string().uuid(), pdf_output_file: z.string().optional().describe(fs ? "Save the PDF to this local path." : "Not available on the hosted server") },
+      annotations: READ,
+    },
+    async (a) =>
+      run(async () => {
+        const report = await client.getReport(a.report_id);
+        if (fs && a.pdf_output_file) {
+          const pdf = await client.getReportPdf(a.report_id);
+          const out = guard(opts.roots, a.pdf_output_file);
+          await mkdir(dirname(out), { recursive: true });
+          await writeFile(out, pdf);
+          return { ...report, pdf_file: out };
+        }
+        return report;
+      }),
+  );
+
   server.registerTool(
     "provenance_chain_verify",
     { title: "Verify ledger chain", description: "Recompute the organization's entire hash chain and report the first broken link, if any.", annotations: READ },

@@ -140,6 +140,29 @@ export function openapiDocument(base: string) {
       "/provenance/formats": {
         get: { tags: ["Provenance"], summary: "Supported input formats and limits", responses: { "200": jsonOf("Formats") } },
       },
+      "/provenance/reports": {
+        post: {
+          tags: ["Provenance"], summary: "Create a leak report",
+          description:
+            "Verify a suspect file and store the finding as a report: verdict, confidence, the recipient of the matching copy, every method that ran, and an integrity hash. Attribution is on by default (metered as one detection when it runs); pass `attribute=false` to skip it. The report is available as JSON and as a PDF at `links.pdf`. Optional `note` (multipart field or `X-VYBZ-Note` header) is printed on the report.",
+          parameters: [...attributeParams, nameHeader, { name: "X-VYBZ-Note", in: "header", schema: { type: "string", maxLength: 2000 }, description: "Free-text note printed on the report." }],
+          requestBody: audioBody("The suspect file, raw or as one multipart part. Multipart may add `note`."),
+          responses: { "201": jsonOf("Report", "Stored report."), "413": err("Too large") },
+        },
+        get: {
+          tags: ["Provenance"], summary: "List leak reports",
+          parameters: [{ name: "asset", in: "query", schema: { type: "string" }, description: "Only reports whose finding points at this asset." }, { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200, default: 50 } }],
+          responses: { "200": { description: "Newest first.", content: { "application/json": { schema: { type: "object", properties: { object: { const: "list" }, data: { type: "array", items: { $ref: "#/components/schemas/Report" } } } } } } } },
+        },
+      },
+      "/provenance/reports/{id}": {
+        get: {
+          tags: ["Provenance"], summary: "Get a leak report (JSON or PDF)",
+          description: "Returns the report as JSON. Append `.pdf`, pass `?format=pdf`, or send `Accept: application/pdf` for the PDF; the `X-VYBZ-Report-Hash` header on the PDF equals `report_hash` in the JSON.",
+          parameters: [idParam("id", "Report id, optionally with a `.pdf` suffix"), { name: "format", in: "query", schema: { type: "string", enum: ["json", "pdf"] } }],
+          responses: { "200": { description: "The report.", content: { "application/json": { schema: { $ref: "#/components/schemas/Report" } }, "application/pdf": { schema: { type: "string", format: "binary" } } } }, "404": err("Not found") },
+        },
+      },
       "/provenance/chain": { get: { tags: ["Provenance"], summary: "Verify the organization's whole ledger chain", responses: { "200": { description: "{ ok, length, first_bad_seq }" } } } },
 
       "/webhooks": {
@@ -263,6 +286,26 @@ export function openapiDocument(base: string) {
           description: "One verification method and its outcome. `method` is one of exact_hash, pcm_hash, fingerprint, content_credentials, watermark. Fingerprint evidence adds asset_id, similarity (1 - bit error rate), offset_sec (where the suspect starts within the original), overlap_sec, and votes. Watermark evidence mirrors a Detection.",
           properties: { method: { type: "string", enum: ["exact_hash", "pcm_hash", "fingerprint", "content_credentials", "watermark"] }, result: { type: "string", enum: ["match", "no_match", "attributed", "inconclusive", "present", "absent", "skipped", "not_requested"] }, reason: { type: "string" } },
           additionalProperties: true,
+        },
+        Report: {
+          type: "object",
+          description: "A stored verification with attribution: the document a rights holder forwards when a copy leaks.",
+          properties: {
+            id: { type: "string" },
+            object: { const: "provenance.report" },
+            name: { type: "string" },
+            sha256: { type: "string", description: "SHA-256 of the submitted file." },
+            verdict: { type: "string", enum: ["original", "issued_copy", "derived_copy", "derived_unattributed", "unknown"] },
+            confidence: { type: "string", enum: ["exact", "high", "medium", "none"] },
+            input: { type: "object" },
+            asset: { oneOf: [{ $ref: "#/components/schemas/Asset" }, { type: "null" }] },
+            issuance: { oneOf: [{ $ref: "#/components/schemas/Issuance" }, { type: "null" }], description: "The recipient's copy the file was matched to." },
+            evidence: { type: "array", items: { type: "object" } },
+            note: { type: ["string", "null"] },
+            report_hash: { type: "string", description: "SHA-256 over id, created_at, sha256, verdict, confidence, asset_id, issuance_id, and evidence." },
+            created_at: { type: "string" },
+            links: { type: "object", properties: { self: { type: "string" }, pdf: { type: "string" }, asset: { type: ["string", "null"] } } },
+          },
         },
         Verification: {
           type: "object",

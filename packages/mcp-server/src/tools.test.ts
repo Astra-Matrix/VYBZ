@@ -69,8 +69,8 @@ describe("tool registry", () => {
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
       [
-        "provenance_chain_verify", "provenance_detect", "provenance_formats", "provenance_get_asset", "provenance_issue", "provenance_issue_batch", "provenance_ledger",
-        "provenance_list_assets", "provenance_list_issuances", "provenance_register", "provenance_verify",
+        "provenance_chain_verify", "provenance_detect", "provenance_formats", "provenance_get_asset", "provenance_get_report", "provenance_issue", "provenance_issue_batch", "provenance_leak_report", "provenance_ledger",
+        "provenance_list_assets", "provenance_list_issuances", "provenance_list_reports", "provenance_register", "provenance_verify",
         "vault_blob_exists", "vault_blob_link", "vault_branches", "vault_commit_entries", "vault_create_branch", "vault_create_repo", "vault_diff",
         "vault_get_commit", "vault_get_repo", "vault_history", "vault_list_repos", "vault_tree", "vault_upload_blob",
         "vybz_billing_usage", "vybz_whoami", "webhook_deliveries", "webhooks_create", "webhooks_delete", "webhooks_list", "webhooks_test", "webhooks_update",

@@ -57,6 +57,8 @@ Give it `https://vybz.cloud/v1/openapi.json` and `https://vybz.cloud/llms.txt`. 
 | `provenance_list_issuances`, `provenance_ledger` | `provenance:read` | Who received what; chained history. |
 | `provenance_verify` | `provenance:read` | What is this file? Exact hash, PCM hash, fingerprint (identifies the original, no id needed), Content Credentials, and with `attribute: true` the watermark. Any format. `files` / `urls` for batches of 25. |
 | `provenance_detect` | `provenance:detect` | Attribute suspect files to a recipient of a known asset. Any format, resampled automatically. `files` / `urls` for batches. |
+| `provenance_leak_report` | `provenance:read` + `provenance:detect` | The document to forward when a copy leaks: verifies one suspect file with attribution on, stores the finding, returns verdict, confidence, recipient, evidence, integrity hash, and `links.pdf`. Optional `note`; local servers can also save the PDF with `pdf_output_file`. |
+| `provenance_list_reports`, `provenance_get_report` | `provenance:read` | Stored reports; one report as JSON, optionally saving its PDF locally. |
 | `provenance_formats` | any | Formats this deployment decodes, and limits. |
 | `provenance_chain_verify` | `provenance:read` | Recompute the organization chain. |
 | `webhooks_list`, `webhooks_create`, `webhooks_update`, `webhooks_delete`, `webhooks_test`, `webhook_deliveries` | `org:read` / `webhooks:manage` | Signed event delivery to https endpoints; deliveries with status and retry. |
@@ -128,4 +130,4 @@ const asset = await vybz.registerAsset(wavBytes, { title: "Master" });
 const link = await vybz.issueLink(asset.id as string, { recipient: "partner@example.com" });
 ```
 
-Last updated: 2026-09-07
+Last updated: 2026-09-08

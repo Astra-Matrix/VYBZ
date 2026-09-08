@@ -68,7 +68,7 @@ function webPage(path: string, name: string, description: string, extra: Record<
 }
 
 const HOME_DESCRIPTION =
-  "Forensic audio watermarking, C2PA Content Credentials, and leak attribution as an API, plus version control for DAW projects. Built for people and AI agents.";
+  "Who leaked it? VYBZ marks every copy of unreleased audio to its recipient and names the source when it leaks, with a report to forward. Vault keeps sessions.";
 
 const PROVENANCE_DESCRIPTION =
   "Issue per-recipient forensically watermarked copies with C2PA Content Credentials, verify any file, and attribute a leaked copy to the recipient it went to.";
@@ -80,7 +80,7 @@ const AGENTS_DESCRIPTION =
   "Every VYBZ capability as a Model Context Protocol tool, hosted at vybz.cloud or local with npx. Scoped keys, a full audit log, nothing leaves the organization.";
 
 const PRICING_DESCRIPTION =
-  "Developer free. Creator $9, Pro $85, Ultimate $245 a month, each with a 14-day trial and two months free yearly. Enterprise by contract.";
+  "Manager $9, Label $85, Catalog $245 a month, each with a 14-day trial and two months free yearly. Developer free. Enterprise by contract.";
 
 const STATIC_ROUTES: RouteSeo[] = [
   {
@@ -154,7 +154,7 @@ const STATIC_ROUTES: RouteSeo[] = [
         brand: { "@id": ORG_ID },
         offers: [
           { "@type": "Offer", name: "Developer", price: "0", priceCurrency: "USD", url: `${SITE}/pricing`, availability: "https://schema.org/InStock" },
-          ...[["Creator", "9", "90"], ["Pro", "85", "850"], ["Ultimate", "245", "2450"]].flatMap(([name, month, year]) => [
+          ...[["Manager", "9", "90"], ["Label", "85", "850"], ["Catalog", "245", "2450"]].flatMap(([name, month, year]) => [
             { "@type": "Offer", name, price: month, priceCurrency: "USD", url: `${SITE}/pricing`, availability: "https://schema.org/InStock", priceSpecification: { "@type": "UnitPriceSpecification", price: month, priceCurrency: "USD", billingIncrement: 1, unitCode: "MON" } },
             { "@type": "Offer", name: `${name}, yearly`, price: year, priceCurrency: "USD", url: `${SITE}/pricing`, availability: "https://schema.org/InStock", priceSpecification: { "@type": "UnitPriceSpecification", price: year, priceCurrency: "USD", billingIncrement: 1, unitCode: "ANN" } },
           ]),
@@ -179,7 +179,7 @@ const STATIC_ROUTES: RouteSeo[] = [
 const DOC_DESCRIPTIONS: Record<string, string> = {
   overview: "VYBZ documentation. Provenance for forensic watermarking and leak attribution, Vault for DAW version control, one API key, a console, and an MCP server.",
   quickstart: "Five minutes from sign-up to an attributed leak: create a key, register an original, issue a watermarked copy, and detect which recipient it came from.",
-  product: "What VYBZ sells and to whom: Provenance and Vault for sample libraries, sync houses, labels, distributors, AI music companies, and studios. Plans and teams.",
+  product: "What VYBZ sells and to whom: leak forensics for managers, labels, studios, and sync houses, Vault for the sessions, agent access for the pipeline. Plans.",
   provenance: "How VYBZ makes every copy traceable: the object model, the watermark, Content Credentials, verify versus detect, the ledger, formats, and limits.",
   vault: "How Vault stores DAW projects: content-addressed blobs deduplicated per organization, whole-tree commits, hashing rules, concurrency, and limits.",
   api: "REST reference for the VYBZ API at vybz.cloud/v1: conventions, error codes, platform, Provenance and Vault endpoints, scopes, and the OpenAPI 3.1 document.",

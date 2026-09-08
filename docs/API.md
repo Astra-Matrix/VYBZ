@@ -121,6 +121,17 @@ Verdicts: `original` (the registered original, by bytes or PCM), `issued_copy` (
 ### `POST /provenance/verify/batch` — `provenance:read`
 Same body shapes as `detect/batch`; `attribute` and `asset` may be form fields, JSON fields, or query parameters. Returns one verification per item and a `summary` counted by verdict.
 
+### `POST /provenance/reports` — `provenance:read` (attribution needs `provenance:detect`)
+The leak report: a stored verification with attribution on by default. Body: the suspect file, raw or as one multipart part; optional `note` (multipart field or `X-VYBZ-Note` header, 2,000 characters) is printed on the report. Pass `attribute=false` to skip the watermark step. Returns `201` with the report: `verdict`, `confidence`, `asset`, `issuance` (the recipient's copy the file was matched to), `evidence[]`, `note`, `report_hash`, and `links.pdf`. Attribution is metered as one detection when it runs. The submitted file is not stored; its SHA-256 is.
+
+`report_hash` is SHA-256 over `{id, created_at, sha256, verdict, confidence, asset_id, issuance_id, evidence}` as JSON. The PDF carries the same value in its footer and in the `X-VYBZ-Report-Hash` response header, so a report can be checked against the record later.
+
+### `GET /provenance/reports?asset=&limit=` — `provenance:read`
+Reports, newest first. `asset` filters to one original.
+
+### `GET /provenance/reports/{id}` — `provenance:read`
+The report as JSON. Append `.pdf`, pass `?format=pdf`, or send `Accept: application/pdf` for the printable version (`Content-Disposition: attachment`).
+
 ### `GET /provenance/formats` — any scope
 Formats decoded in the edge, formats routed to the decode worker (and whether one is configured), what registration accepts, size and batch limits, and the list of verification methods.
 
@@ -239,4 +250,4 @@ Create: `{ "name", "from"?: branch|sha }`.
 
 Every response carries `Access-Control-Allow-Origin: *`; keys are bearer secrets, not cookies, so a browser origin gains nothing from it. Preflight allows `GET, POST, PUT, PATCH, DELETE` and the request headers `Authorization`, `X-API-Key`, `Content-Type`, `Accept`, `Idempotency-Key`, `X-VYBZ-Org`, `X-VYBZ-Title`, `X-VYBZ-External-Ref`, `X-VYBZ-Content-SHA256`, `X-VYBZ-Mime`, `X-VYBZ-Name`, `X-VYBZ-Attribute`, `X-VYBZ-Asset`. Exposed: `X-Request-Id`, `X-RateLimit-Remaining`, `X-VYBZ-Watermark-Id`, `X-VYBZ-Issuance-Id`, `X-VYBZ-C2PA`, `X-VYBZ-SHA256`, `Content-Disposition`.
 
-Last updated: 2026-09-07
+Last updated: 2026-09-08

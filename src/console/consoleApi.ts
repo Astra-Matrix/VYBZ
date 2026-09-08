@@ -58,6 +58,25 @@ export const API_BASE = `${SUPABASE_URL}/functions/v1/api-v1/v1`;
  * JWT plus `X-VYBZ-Org` for organization members, so the console reaches every
  * capability without minting a key.
  */
+/** Fetch a binary route with the session and hand it to the browser as a download. */
+export async function apiDownload(orgId: string, path: string, filename: string): Promise<void> {
+  const { data } = await client().auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error("Not signed in.");
+  const res = await fetch(`${API_BASE}${path}`, { headers: { Authorization: `Bearer ${token}`, "X-VYBZ-Org": orgId } });
+  if (!res.ok) {
+    let msg = `${res.status} ${res.statusText}`;
+    try { const j = await res.json(); msg = j?.error?.message ?? msg; } catch { /* not json */ }
+    throw new Error(msg);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.rel = "noopener";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
 export async function apiRequest<T>(orgId: string, method: string, path: string, body?: BodyInit, headers: Record<string, string> = {}): Promise<T> {
   const { data } = await client().auth.getSession();
   const token = data.session?.access_token;

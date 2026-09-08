@@ -32,6 +32,7 @@ import {
   type Principal,
 } from "../_shared/apiGateway.ts";
 import { openapiDocument } from "../_shared/openapi.ts";
+import { renderLeakReport } from "../_shared/leakReport.ts";
 import { deriveKey, detectFolded, embedChannel, encodeWav, foldChannel, parseWav } from "../_shared/watermark.mjs";
 import { DecodeError, NATIVE_FORMATS, WORKER_FORMATS, decodeAudio, pcmHash, resample, sniff, supportedFormats } from "../_shared/decode.mjs";
 import { FP_FPS, FP_HOP, FP_MATCH_BER, FP_MIN_OVERLAP_FRAMES, FP_RATE, FP_WINDOW, bestAlignment, fingerprint, fromBytes, toBytes, toInt4 } from "../_shared/fingerprint.mjs";
@@ -1889,6 +1890,137 @@ async function abortUpload(ctx: Ctx, id: string, uploadId: string) {
   return json({ object: "vault.upload", id: u.id, aborted: true }, 200, ctx.headers);
 }
 
+// ── Leak reports ────────────────────────────────────────────────────────────
+// A report is a stored verification with attribution on by default: the
+// finding, the recipient, every method that ran, and an integrity hash. It is
+// what a manager forwards to a lawyer or a label head. JSON and PDF carry the
+// same hash.
+
+const MAX_REPORT_NOTE = 2000;
+
+async function reportHash(row: { id: string; created_at: string; sha256: string; verdict: string; confidence: string; asset_id: string | null; issuance_id: string | null; evidence: unknown }): Promise<string> {
+  const canon = JSON.stringify({ id: row.id, created_at: row.created_at, sha256: row.sha256, verdict: row.verdict, confidence: row.confidence, asset_id: row.asset_id, issuance_id: row.issuance_id, evidence: row.evidence });
+  return sha256Hex(canon);
+}
+
+function reportView(r: any, asset: any | null, issuance: any | null) {
+  return {
+    id: r.id,
+    object: "provenance.report",
+    name: r.name,
+    sha256: r.sha256,
+    verdict: r.verdict,
+    confidence: r.confidence,
+    input: r.input ?? {},
+    asset: asset ? assetView(asset) : null,
+    issuance: issuance ? issuanceView(issuance) : null,
+    evidence: r.evidence ?? [],
+    note: r.note ?? null,
+    report_hash: r.report_hash,
+    created_at: r.created_at,
+    links: {
+      self: `${PUBLIC_BASE}/provenance/reports/${r.id}`,
+      pdf: `${PUBLIC_BASE}/provenance/reports/${r.id}.pdf`,
+      asset: asset ? `${PUBLIC_BASE}/provenance/assets/${asset.id}` : null,
+    },
+  };
+}
+
+async function loadReport(ctx: Ctx, id: string) {
+  if (!isUuid(id)) throw new ApiError(404, "not_found", "No such report.");
+  const { data: r } = await admin.from("provenance_reports").select("*").eq("org_id", ctx.principal.orgId).eq("id", id).maybeSingle();
+  if (!r) throw new ApiError(404, "not_found", "No such report.");
+  const { data: asset } = r.asset_id ? await admin.from("provenance_assets").select("*").eq("id", r.asset_id).maybeSingle() : { data: null };
+  const { data: issuance } = r.issuance_id ? await admin.from("provenance_issuances").select("*").eq("id", r.issuance_id).maybeSingle() : { data: null };
+  return { r, asset, issuance };
+}
+
+async function createReport(ctx: Ctx) {
+  requireScope(ctx.principal, "provenance:read");
+  const ct = ctx.req.headers.get("content-type") ?? "";
+  let file: FileInput;
+  let fields: Record<string, string> = {};
+  if (ct.includes("multipart/form-data")) {
+    const rr = await readMultipart(ctx, 1);
+    if (!rr.items.length) throw new ApiError(400, "empty_body", "Attach the suspect file as a multipart part.");
+    file = rr.items[0];
+    fields = rr.fields;
+  } else {
+    file = await readOneFile(ctx);
+  }
+  ctx.bytesIn = file.bytes.byteLength;
+  const note = (fields.note ?? ctx.req.headers.get("x-vybz-note") ?? "").trim();
+  if (note.length > MAX_REPORT_NOTE) throw new ApiError(422, "invalid_note", `Notes are at most ${MAX_REPORT_NOTE} characters.`);
+  // Attribution is the point of a report, so it is on unless explicitly turned off.
+  const opts = verifyOptions(ctx, fields);
+  const attrRaw = fields.attribute ?? ctx.url.searchParams.get("attribute") ?? ctx.req.headers.get("x-vybz-attribute");
+  if (attrRaw === null || attrRaw === undefined || attrRaw === "") opts.attribute = true;
+  const v = await runVerification(ctx, file, opts);
+
+  const id = crypto.randomUUID();
+  const created_at = new Date().toISOString();
+  const row = {
+    id,
+    org_id: ctx.principal.orgId,
+    asset_id: v.asset?.id ?? null,
+    issuance_id: v.issuance?.id ?? null,
+    name: file.name.slice(0, 200),
+    sha256: v.sha256,
+    verdict: v.verdict,
+    confidence: v.confidence,
+    input: v.input,
+    evidence: v.evidence,
+    note: note || null,
+    created_by_key: ctx.principal.keyId,
+    created_at,
+  };
+  const report_hash = await reportHash(row);
+  const { error } = await admin.from("provenance_reports").insert({ ...row, report_hash });
+  if (error) throw new ApiError(500, "db_error", "The report could not be stored.");
+  const { asset, issuance } = await loadReport(ctx, id);
+  return json(reportView({ ...row, report_hash }, asset, issuance), 201, ctx.headers);
+}
+
+async function listReports(ctx: Ctx) {
+  requireScope(ctx.principal, "provenance:read");
+  const limit = Math.min(200, Math.max(1, Number(ctx.url.searchParams.get("limit") ?? 50) || 50));
+  const assetId = ctx.url.searchParams.get("asset");
+  let q = admin.from("provenance_reports").select("*").eq("org_id", ctx.principal.orgId).order("created_at", { ascending: false }).limit(limit);
+  if (assetId && isUuid(assetId)) q = q.eq("asset_id", assetId);
+  const { data } = await q;
+  const rows = data ?? [];
+  const assetIds = [...new Set(rows.map((r: any) => r.asset_id).filter(Boolean))];
+  const issIds = [...new Set(rows.map((r: any) => r.issuance_id).filter(Boolean))];
+  const { data: assets } = assetIds.length ? await admin.from("provenance_assets").select("*").in("id", assetIds) : { data: [] };
+  const { data: iss } = issIds.length ? await admin.from("provenance_issuances").select("*").in("id", issIds) : { data: [] };
+  const aMap = new Map((assets ?? []).map((a: any) => [a.id, a]));
+  const iMap = new Map((iss ?? []).map((i: any) => [i.id, i]));
+  return json({ object: "list", data: rows.map((r: any) => reportView(r, aMap.get(r.asset_id) ?? null, iMap.get(r.issuance_id) ?? null)) }, 200, ctx.headers);
+}
+
+async function getReport(ctx: Ctx, rawId: string) {
+  requireScope(ctx.principal, "provenance:read");
+  const wantsPdf = rawId.endsWith(".pdf") || ctx.url.searchParams.get("format") === "pdf" || (ctx.req.headers.get("accept") ?? "").includes("application/pdf");
+  const id = rawId.replace(/\.pdf$/, "");
+  const { r, asset, issuance } = await loadReport(ctx, id);
+  if (!wantsPdf) return json(reportView(r, asset, issuance), 200, ctx.headers);
+  const { data: org } = await admin.from("orgs").select("name, slug").eq("id", ctx.principal.orgId).maybeSingle();
+  const pdf = renderLeakReport(
+    {
+      id: r.id, created_at: r.created_at, name: r.name, sha256: r.sha256, verdict: r.verdict, confidence: r.confidence,
+      input: r.input ?? {}, evidence: r.evidence ?? [], note: r.note ?? null, report_hash: r.report_hash,
+      org: { name: org?.name ?? "Organization", slug: org?.slug ?? "" },
+      asset: asset ? { id: asset.id, title: asset.title, external_ref: asset.external_ref, sha256: asset.sha256, created_at: asset.created_at, duration_sec: asset.duration_sec === null ? null : Number(asset.duration_sec) } : null,
+      issuance: issuance ? { id: issuance.id, recipient: issuance.recipient, license: issuance.license, watermark_id: issuance.watermark_id, created_at: issuance.created_at, c2pa_signed: !!issuance.c2pa_signed } : null,
+    },
+    { publicBase: PUBLIC_BASE },
+  );
+  return new Response(pdf, {
+    status: 200,
+    headers: { ...ctx.headers, "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="vybz-leak-report-${r.id.slice(0, 8)}.pdf"`, "X-VYBZ-Report-Hash": r.report_hash },
+  });
+}
+
 // ── Router ──────────────────────────────────────────────────────────────────
 
 async function route(ctx: Ctx): Promise<Response> {
@@ -1905,6 +2037,10 @@ async function route(ctx: Ctx): Promise<Response> {
     if (p1 === "verify" && p2 === "batch" && m === "POST") return verifyBatch(ctx);
     if (p1 === "formats" && m === "GET") return formats(ctx);
     if (p1 === "chain" && m === "GET") return chainVerify(ctx);
+    if (p1 === "reports") {
+      if (!p2) return m === "POST" ? createReport(ctx) : m === "GET" ? listReports(ctx) : methodNotAllowed();
+      if (!p3 && m === "GET") return getReport(ctx, p2);
+    }
     if (p1 === "assets") {
       if (!p2) return m === "POST" ? registerAsset(ctx) : m === "GET" ? listAssets(ctx) : methodNotAllowed();
       if (!p3 && m === "GET") return showAsset(ctx, p2);

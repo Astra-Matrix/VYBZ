@@ -1,6 +1,6 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { KeyRound, Activity, ScrollText, Bot, LayoutDashboard, Plus, Copy, Check, ShieldCheck, Users, CreditCard, Fingerprint, Webhook, FolderGit2, AudioLines, Gift } from "lucide-react";
+import { KeyRound, Activity, ScrollText, Bot, LayoutDashboard, Plus, Copy, Check, ShieldCheck, Users, CreditCard, Fingerprint, Webhook, FolderGit2, AudioLines, Gift, FileSearch, Send } from "lucide-react";
 import { MembersPage, BillingPage, JoinPage } from "./TeamBilling";
 import { VerifyPage } from "./VerifyPage";
 import { WebhooksPage } from "./WebhooksPage";
@@ -8,6 +8,7 @@ import { VaultPage } from "./VaultPage";
 import { AssetsPage } from "./AssetsPage";
 import { SecurityPage } from "./SecurityPage";
 import { ReferralsPage } from "./ReferralsPage";
+import { ReportsPage } from "./ReportsPage";
 import { ORG_EVENT } from "@/site/AccountMenu";
 import { SideNavToggle } from "@/site/SideNavToggle";
 import { useSession } from "@/store/session";
@@ -99,6 +100,7 @@ export function ConsolePage() {
             <NavLink to="/console/keys" className={({ isActive }) => (isActive ? "active" : "")}><KeyRound size={15} /> API keys</NavLink>
             <NavLink to="/console/assets" className={({ isActive }) => (isActive ? "active" : "")}><AudioLines size={15} /> Assets</NavLink>
             <NavLink to="/console/verify" className={({ isActive }) => (isActive ? "active" : "")}><Fingerprint size={15} /> Verify</NavLink>
+            <NavLink to="/console/reports" className={({ isActive }) => (isActive ? "active" : "")}><FileSearch size={15} /> Leak reports</NavLink>
             <NavLink to="/console/webhooks" className={({ isActive }) => (isActive ? "active" : "")}><Webhook size={15} /> Webhooks</NavLink>
             <NavLink to="/console/vault" className={({ isActive }) => (isActive ? "active" : "")}><FolderGit2 size={15} /> Vault</NavLink>
             <NavLink to="/console/usage" className={({ isActive }) => (isActive ? "active" : "")}><Activity size={15} /> Usage</NavLink>
@@ -119,6 +121,8 @@ export function ConsolePage() {
                 <Route path="keys" element={<Keys org={org} />} />
                 <Route path="assets" element={<AssetsPage org={org} />} />
                 <Route path="verify" element={<VerifyPage org={org} />} />
+                <Route path="reports" element={<ReportsPage org={org} />} />
+                <Route path="reports/:id" element={<ReportsPage org={org} />} />
                 <Route path="webhooks" element={<WebhooksPage org={org} />} />
                 <Route path="vault" element={<VaultPage org={org} />} />
                 <Route path="vault/:repo" element={<VaultPage org={org} />} />
@@ -225,8 +229,22 @@ function Overview({ org }: { org: Org }) {
           <NavLink to="/console/usage" className="vz-btn vz-btn-ghost vz-btn-sm" style={{ marginTop: 10 }}>View usage</NavLink>
         </div>
       </div>
+      <div className="vz-grid vz-grid-2" style={{ marginTop: 16 }}>
+        <div className="vz-card vz-card-accent">
+          <div className="vz-icon"><Send size={18} /></div>
+          <h3 className="vz-h3">Send a copy that is uniquely theirs</h3>
+          <p className="vz-p">Register the master, add the people who need it, and each gets a copy carrying an inaudible mark tied to them.</p>
+          <NavLink to="/console/assets" className="vz-btn vz-btn-primary vz-btn-sm">Protect a master</NavLink>
+        </div>
+        <div className="vz-card vz-card-accent">
+          <div className="vz-icon violet"><FileSearch size={18} /></div>
+          <h3 className="vz-h3">Something leaked</h3>
+          <p className="vz-p">Drop the file that turned up. VYBZ names the recipient it was issued to and gives you a report to forward.</p>
+          <NavLink to="/console/reports" className="vz-btn vz-btn-primary vz-btn-sm">Name the leak</NavLink>
+        </div>
+      </div>
       <div className="vz-card" style={{ marginTop: 16 }}>
-        <h3 className="vz-h3">First call</h3>
+        <h3 className="vz-h3">For integrations</h3>
         <Code title="whoami" code={`curl https://vybz.cloud/v1/me -H "Authorization: Bearer vybz_live_…"`} />
       </div>
     </>

@@ -159,6 +159,32 @@ export class VybzClient {
   }
   formats() { return this.call<Record<string, unknown>>("GET", "/provenance/formats"); }
 
+  // Leak reports: a stored verification with attribution, as JSON and PDF.
+  createReport(bytes: Uint8Array, opts: VerifyOptions & { note?: string } = {}) {
+    const q = verifyQuery(opts);
+    const headers: Record<string, string> = { "X-VYBZ-Name": opts.name ?? "file" };
+    if (opts.note) headers["X-VYBZ-Note"] = opts.note.slice(0, 2000);
+    return this.call<Record<string, unknown>>("POST", `/provenance/reports${q}`, { body: bytes, headers });
+  }
+  listReports(opts: { asset?: string; limit?: number } = {}) {
+    const q = new URLSearchParams();
+    if (opts.asset) q.set("asset", opts.asset);
+    if (opts.limit) q.set("limit", String(opts.limit));
+    const s = q.toString();
+    return this.call<{ data: Record<string, unknown>[] }>("GET", `/provenance/reports${s ? `?${s}` : ""}`);
+  }
+  getReport(id: string) { return this.call<Record<string, unknown>>("GET", `/provenance/reports/${encodeURIComponent(id)}`); }
+  async getReportPdf(id: string): Promise<Uint8Array> {
+    const res = await fetch(`${this.base}/provenance/reports/${encodeURIComponent(id)}.pdf`, { headers: { Authorization: `Bearer ${this.key}`, Accept: "application/pdf" } });
+    if (!res.ok) {
+      let body: unknown = null;
+      try { body = await res.json(); } catch { /* not json */ }
+      const e = (body as { error?: { code?: string; message?: string } } | null)?.error;
+      throw new VybzApiError(res.status, e?.code ?? "http_error", e?.message ?? `${res.status} ${res.statusText}`);
+    }
+    return new Uint8Array(await res.arrayBuffer());
+  }
+
   // Webhooks
   listWebhooks() { return this.call<{ events: string[]; data: Record<string, unknown>[] }>("GET", "/webhooks"); }
   createWebhook(req: { url: string; events?: string[]; description?: string }) { return this.call<Record<string, unknown>>("POST", "/webhooks", { json: req }); }

@@ -363,3 +363,20 @@ main:focus { outline: none; }
   .vz-page-head { flex-direction: column; align-items: stretch; }
   .vz-page-head > div:last-child { display: flex; flex-wrap: wrap; gap: 8px; }
 }
+
+/* ── Leak report preview and definition lists ──────────────────────────────── */
+.vz-dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 12px 0 0; font-size: 13px; }
+.vz-dl dt { color: var(--vz-muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; padding-top: 2px; }
+.vz-dl dd { margin: 0; color: var(--vz-text); min-width: 0; overflow-wrap: anywhere; }
+.vz-report { position: relative; border: 1px solid var(--vz-line-2); border-radius: var(--vz-radius); padding: 22px; background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025)); box-shadow: 0 30px 80px rgba(0,0,0,.45), 0 0 0 1px rgb(var(--vz-violet-rgb) / 0.08); }
+.vz-report::before { content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1px; background: linear-gradient(135deg, rgb(var(--vz-violet-rgb) / 0.7), transparent 40%, transparent 60%, rgb(var(--vz-cyan-rgb) / 0.6)); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude; -webkit-mask-composite: xor; pointer-events: none; }
+.vz-report-head { display: flex; align-items: center; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--vz-line); }
+.vz-report-mark { width: 26px; height: 26px; border-radius: 7px; background: linear-gradient(135deg, #00ff8f, #00a1ff); flex: none; }
+.vz-report-kicker { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--vz-muted); font-weight: 600; }
+.vz-report-meta { font-family: var(--vz-mono); font-size: 11.5px; color: var(--vz-muted); margin-top: 2px; }
+.vz-report-title { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; margin: 16px 0 6px; }
+.vz-report-line { font-size: 13.5px; line-height: 1.55; color: var(--vz-text-2); margin: 0 0 14px; }
+.vz-report-grid { display: grid; grid-template-columns: max-content 1fr; gap: 7px 16px; margin: 0; font-size: 13px; }
+.vz-report-grid dt { color: var(--vz-muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; padding-top: 2px; }
+.vz-report-grid dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 480px) { .vz-report { padding: 16px; } .vz-report-title { font-size: 19px; } .vz-report-grid, .vz-dl { grid-template-columns: 1fr; gap: 2px 0; } .vz-report-grid dd, .vz-dl dd { margin-bottom: 6px; } }

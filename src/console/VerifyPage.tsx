@@ -1,5 +1,6 @@
 import { type ChangeEvent, type DragEvent, useState } from "react";
 import { Upload, ShieldCheck, X } from "lucide-react";
+import { Link } from "react-router-dom";
 import { apiRequest, fmtBytes, type Org } from "./consoleApi";
 
 type Evidence = { method: string; result: string; reason?: string; note?: string } & Record<string, unknown>;
@@ -119,7 +120,7 @@ export function VerifyPage({ org }: { org: Org }) {
       <div className="vz-page-head">
         <div>
           <h1>Verify</h1>
-          <p>Drop files in any format. Each is checked by exact hash, decoded-audio hash, fingerprint, and Content Credentials. Attribution correlates the watermark and counts as a detection.</p>
+          <p>Drop files in any format. Each is checked by exact hash, decoded-audio hash, fingerprint, and Content Credentials. Attribution correlates the watermark and counts as a detection. Need something to forward? <Link to="/console/reports">Create a leak report</Link>.</p>
         </div>
       </div>
 

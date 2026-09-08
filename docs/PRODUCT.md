@@ -2,7 +2,9 @@
 
 ## Position
 
-VYBZ sells certainty about audio files to companies whose business depends on sending audio to people they do not control.
+VYBZ sells one answer first: **who leaked it**. The buyers are the people who hold a catalog before the world does and feel a leak the same week it happens: artist managers, labels, distributors, studios, and sync houses. Leak forensics is bought under pressure from a budget that already exists, so it is the front door. Vault is the expansion sale once the catalog is in the system, and the API and MCP tools are how larger accounts put both into their pipeline.
+
+The pitch ladders in that order on every surface: home page, console overview, plan names.
 
 - A sample library sends thousands of packs to subscribers and finds them on piracy sites.
 - A sync house sends previews to fifty music supervisors and one leaks a film cue.
@@ -22,9 +24,12 @@ Two products answer these. They share the account, key, audit log, console, and 
 | Issue | `POST /provenance/assets/{id}/issue` | Unique inaudible watermark per recipient. C2PA manifest when enabled. |
 | Verify | `POST /provenance/verify` | Is this exact file ours, and for whom was it issued? |
 | Detect | `POST /provenance/assets/{id}/detect` | Which recipient did a leaked copy come from, with confidence. |
+| Report | `POST /provenance/reports`, `GET /provenance/reports/{id}.pdf` | The leak report: recipient, confidence, every method, integrity hash. PDF for people, JSON for systems. |
 | Ledger | `GET /provenance/assets/{id}/ledger`, `GET /provenance/chain` | Tamper-evident history, verifiable in one call. |
 
 **Why it wins:** competitors sell either watermarking or credentials, and none of them offer per-recipient attribution as an API with a ledger and an agent interface. The workflow is four calls and it is legible to a lawyer.
+
+Plan ids in the database, the API (`plan`), and the Paddle catalog are unchanged: `developer`, `creator` (Manager), `pro` (Label), `ultimate` (Catalog), `enterprise`. Only the names shown to buyers changed on 2026-09-08.
 
 ## Vault
 
@@ -52,15 +57,15 @@ Every capability is an MCP tool. Hosted at `https://vybz.cloud/api/mcp` for zero
 
 | Plan | Price | Includes |
 |---|---|---|
-| Developer | $0 | 1 member, 3 keys, 100 issuances and 20 detections per month, 2 GB Vault. Hard limits. |
-| Creator | $9 / month, $90 / year | One member, 100 GB Vault, 200 issuances and 50 detections per month, Content Credentials. Hard limits. |
-| Pro | $85 / month, $850 / year | 5 members, 500 GB Vault, 1,500 issuances and 300 detections per month, then metered; webhooks, audit export. |
-| Ultimate | $245 / month, $2,450 / year | Unlimited members, 3 TB Vault, 10,000 issuances and 2,000 detections per month, then metered; CA-issued Content Credentials certificate; 99.9% SLA. |
+| Manager | $9 / month, $90 / year | One member, 200 copies issued and 50 leak checks per month, leak reports, Content Credentials, 100 GB Vault. Hard limits. |
+| Label | $85 / month, $850 / year | 5 members, 1,500 copies issued and 300 leak checks per month, then metered; batch issue, webhooks, audit export, 500 GB Vault. |
+| Catalog | $245 / month, $2,450 / year | Unlimited members, 3 TB Vault, 10,000 issuances and 2,000 detections per month, then metered; CA-issued Content Credentials certificate; 99.9% SLA. |
 | Enterprise | Custom | Volume pricing, dedicated signing certificate, private deployment, SSO, retention controls, named support. |
+| Developer | $0 | For building an integration: 1 member, 3 keys, 100 copies and 20 leak checks per month, 2 GB Vault. Hard limits. Listed below the buyer plans on the pricing page. |
 
 Every paid plan starts with a 14-day trial: a card is taken at checkout and charged when the trial ends unless the subscription is cancelled first. One trial per person. While trialing, every plan is capped at 25 issuances, 10 detections, and 10 GB with no overage; the plan's full quantities apply from the first paid period. Second subscriptions, from the same person or the same organization, start paid.
 
-Meters: issuances, detections, unique stored bytes. Reads are free. Developer and Creator limits are hard caps enforced by the API with `402 plan_limit_reached`; Pro, Ultimate, and Enterprise are metered beyond the included quantities and billed in arrears with the next renewal.
+Meters: issuances, detections, unique stored bytes. Reads are free. Developer and Manager limits are hard caps enforced by the API with `402 plan_limit_reached`; Label, Catalog, and Enterprise are metered beyond the included quantities and billed in arrears with the next renewal.
 
 Paid plans are sold by Paddle as merchant of record: checkout, invoices, tax, and refunds happen there, and the subscription is managed from Console → Billing. Prices exclude tax, which Paddle adds at checkout for the billing address given.
 
@@ -78,4 +83,4 @@ Organizations have an owner, admins, and members. Admins manage keys, members, a
 - No DAW plugin as a product. The VST3 in `native/` is retained only as a possible Vault capture source.
 - No marketplace. Customers sell; VYBZ certifies and stores.
 
-Last updated: 2026-09-07
+Last updated: 2026-09-08

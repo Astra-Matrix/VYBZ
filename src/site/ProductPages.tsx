@@ -11,10 +11,10 @@ export function ProvenancePage() {
     <SiteShell>
       <section className="vz-hero" style={{ paddingBottom: 24 }}>
         <span className="vz-eyebrow">Provenance</span>
-        <h1 className="vz-h1">Attribution that survives the internet.</h1>
+        <h1 className="vz-h1">Leak forensics that survive the internet.</h1>
         <p className="vz-lead">
-          Sample libraries, sync houses, labels, distributors, and AI music companies all ship audio to people they do not control. Provenance makes
-          every delivered copy unique and every leak attributable, with an industry-standard Content Credentials manifest on top.
+          Managers, labels, studios, and sync houses ship unreleased audio to people they do not control. Provenance makes every delivered copy
+          unique, names the recipient when one leaks, and hands you a report with the evidence. Content Credentials ride along on every copy.
         </p>
       </section>
 
@@ -23,7 +23,7 @@ export function ProvenancePage() {
           <div><b>1. Register</b><span>POST the original WAV. It is hashed, stored privately, and becomes an asset.</span></div>
           <div><b>2. Issue</b><span>Each recipient gets a copy carrying a unique inaudible watermark and a C2PA manifest.</span></div>
           <div><b>3. Verify</b><span>Any file, any time: is it ours, is it an issued copy, and for whom?</span></div>
-          <div><b>4. Detect</b><span>A leaked copy is correlated against all issuances. The source is named with a confidence.</span></div>
+          <div><b>4. Report</b><span>A leaked copy is correlated against all issuances. The recipient is named with a confidence, in a report you can forward.</span></div>
         </div>
       </section>
 
@@ -300,8 +300,8 @@ export function PricingPage() {
     <SiteShell>
       <section className="vz-hero" style={{ paddingBottom: 12 }}>
         <span className="vz-eyebrow">Pricing</span>
-        <h1 className="vz-h1">Pay for outcomes, not seats.</h1>
-        <p className="vz-lead">Issuances, detections, and unique stored bytes are the only meters. Reading is always free.</p>
+        <h1 className="vz-h1">Priced by what leaves the building.</h1>
+        <p className="vz-lead">Copies issued, leak checks, and stored bytes are the only meters. Reading, verifying, and the ledger are always free.</p>
         <div className="vz-tabs" role="tablist" aria-label="Billing interval" style={{ display: "inline-flex", marginTop: 18, borderBottom: 0, gap: 0, border: "1px solid var(--vz-line)", borderRadius: 999, padding: 3 }}>
           {(["month", "year"] as Interval[]).map((i) => (
             <button key={i} type="button" role="tab" aria-selected={interval === i} className={`vz-tab ${interval === i ? "active" : ""}`} style={{ borderRadius: 999, borderBottom: 0, margin: 0, padding: "8px 16px", background: interval === i ? "var(--vz-panel)" : "none" }} onClick={() => setInterval(i)}>
@@ -315,7 +315,7 @@ export function PricingPage() {
       <section className="vz-section" style={{ borderTop: 0 }}>
         <h2 className="vz-sr">Details</h2>
         <div className="vz-grid vz-grid-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-          {TIERS.map((t) => {
+          {TIERS.filter((t) => t.id !== "developer").map((t) => {
             const p = shown(t);
             return (
               <div key={t.name} className={`vz-card ${t.featured ? "vz-card-accent" : ""}`}>
@@ -343,8 +343,9 @@ export function PricingPage() {
             );
           })}
         </div>
+        <p className="vz-p" style={{ marginTop: 18 }}>Building an integration or evaluating the API? The <b>Developer</b> plan is free: 100 copies and 20 leak checks a month, one member, three keys. <Link to="/signin?mode=create">Start free</Link>.</p>
         <p className="vz-muted" style={{ fontSize: 12.5, marginTop: 18 }}>
-          Every paid plan starts with a 14-day trial, one per person; a card is taken at checkout and charged when the trial ends unless you cancel. During the trial each plan is limited to 25 issuances, 10 detections, and 10 GB, with full quantities from the first paid period. Sold by Paddle as merchant of record; tax is added at checkout. Metered overages on Pro and Ultimate are billed monthly with the renewal. Watermark detection counts one call per suspect file regardless of candidates.
+          Every paid plan starts with a 14-day trial, one per person; a card is taken at checkout and charged when the trial ends unless you cancel. During the trial each plan is limited to 25 issuances, 10 detections, and 10 GB, with full quantities from the first paid period. Sold by Paddle as merchant of record; tax is added at checkout. Metered overages on Label and Catalog are billed monthly with the renewal. Watermark detection counts one call per suspect file regardless of candidates.
         </p>
       </section>
     </SiteShell>
